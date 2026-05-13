@@ -1,0 +1,258 @@
+<div class="container-fluid">
+  <app-page-header title="Training setup" />
+  <p class="text-muted mb-4">Create courses and add modules. Users take courses from the Training section.</p>
+
+  @if (error) {
+    <p class="text-danger mb-3">{{ error }}</p>
+  }
+
+  <div class="card border-0 shadow-sm rounded-3 mb-4">
+    <div class="card-body">
+      <h2 class="h5 mb-3">Create course</h2>
+      <div class="row g-2 align-items-end">
+        <div class="col-md-4">
+          <label class="form-label">Name</label>
+          <input type="text" class="form-control" [(ngModel)]="createCourseName" placeholder="Course name" />
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Description (optional)</label>
+          <input type="text" class="form-control" [(ngModel)]="createCourseDescription" placeholder="Brief description" />
+        </div>
+        <div class="col-md-4">
+          <button type="button" class="btn btn-primary" (click)="createCourse()" [disabled]="!createCourseName.trim() || creatingCourse">
+            {{ creatingCourse ? 'Creating…' : 'Create course' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h2 class="h5 mb-3">Courses</h2>
+  @if (loading) {
+    <p>Loading...</p>
+  } @else if (courses.length === 0) {
+    <div class="card border-0 shadow-sm rounded-3">
+      <div class="card-body text-center py-5 text-muted">
+        No courses yet. Create one above to add modules and quizzes.
+      </div>
+    </div>
+  } @else {
+    <div class="list-group mb-4">
+      @for (c of courses; track c.id) {
+        <div class="list-group-item d-flex justify-content-between align-items-center">
+          @if (editingCourseId === c.id) {
+            <div class="flex-grow-1 me-3">
+              <div class="row g-2 mb-2">
+                <div class="col-md-4">
+                  <label class="form-label">Name</label>
+                  <input type="text" class="form-control" [(ngModel)]="editingCourseName" />
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label">Description</label>
+                  <input type="text" class="form-control" [(ngModel)]="editingCourseDescription" />
+                </div>
+                <div class="col-md-2">
+                  <label class="form-label">Sort</label>
+                  <input type="number" class="form-control" [(ngModel)]="editingCourseSortOrder" min="0" />
+                </div>
+                <div class="col-md-2">
+                  <label class="form-label d-block">Active</label>
+                  <input type="checkbox" class="form-check-input" [(ngModel)]="editingCourseIsActive" />
+                </div>
+              </div>
+              <button type="button" class="btn btn-primary btn-sm" (click)="saveCourse()" [disabled]="savingCourse">Save</button>
+              <button type="button" class="btn btn-outline-secondary btn-sm ms-1" (click)="cancelEditCourse()">Cancel</button>
+            </div>
+          } @else {
+            <div>
+              <span class="fw-semibold">{{ c.name }}</span>
+              @if (c.description) {
+                <span class="text-muted ms-2 small">— {{ c.description }}</span>
+              }
+              <span class="badge bg-secondary ms-2">{{ c.moduleCount }} module(s)</span>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+              <a class="btn btn-sm btn-outline-primary" [routerLink]="['/training/course', c.id]">Open</a>
+              @if (canManage) {
+                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="startEditCourse(c)">Edit</button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="toggleCourseDetail(c.id)">
+                  {{ expandedCourseId === c.id ? 'Hide modules' : 'Manage modules' }}
+                </button>
+              }
+              <button type="button" class="btn btn-outline-secondary btn-sm" (click)="openAddModule(c)">Add module</button>
+              @if (canManage) {
+                <button type="button" class="btn btn-outline-danger btn-sm" (click)="deleteCourse(c.id)">Delete course</button>
+              }
+            </div>
+          }
+        </div>
+        @if (expandedCourseId === c.id && canManage) {
+          <div class="list-group-item bg-light">
+            @if (loadingDetail) {
+              <p class="mb-0">Loading modules...</p>
+            } @else if (courseDetail) {
+              <h6 class="mb-2">Modules</h6>
+              <ul class="list-unstyled mb-0">
+                @for (m of courseDetail.modules; track m.id) {
+                  <li class="mb-2 pb-2 border-bottom">
+                    @if (editingModuleId === m.id) {
+                      <div class="small">
+                        <label class="form-label">Title</label>
+                        <input type="text" class="form-control form-control-sm mb-1" [(ngModel)]="moduleEdit.title" />
+                        <label class="form-label">Content</label>
+                        @if (moduleEditor) {
+                          <div class="d-flex flex-wrap align-items-center gap-2 mb-1">
+                            <ngx-editor-menu [editor]="moduleEditor"></ngx-editor-menu>
+                            <input #imageInput type="file" accept="image/*" class="d-none" (change)="onImageFileSelected($event)" />
+                            <button type="button" class="btn btn-outline-secondary btn-sm" (click)="imageInput.click()" [disabled]="uploadingImage">
+                              {{ uploadingImage ? 'Uploading…' : 'Insert image' }}
+                            </button>
+                          </div>
+                          <ngx-editor [editor]="moduleEditor" [(ngModel)]="moduleEdit.contentHtml" name="moduleContent" outputFormat="html" placeholder="Write module content here..."></ngx-editor>
+                        }
+                        <label class="form-label">Video</label>
+                        <div class="d-flex gap-2 mb-1 flex-wrap">
+                          <input type="text" class="form-control form-control-sm flex-grow-1" [(ngModel)]="moduleEdit.videoUrl" placeholder="External URL (YouTube, Vimeo) or upload below" />
+                          <input #videoInput type="file" accept="video/mp4,video/webm,.mp4,.webm" class="d-none" (change)="onVideoFileSelected($event)" />
+                          <button type="button" class="btn btn-outline-secondary btn-sm" (click)="videoInput.click()" [disabled]="uploadingVideo">
+                            {{ uploadingVideo ? 'Uploading…' : 'Upload video' }}
+                          </button>
+                        </div>
+                        <label class="form-label">Sort order</label>
+                        <input type="number" class="form-control form-control-sm mb-1" [(ngModel)]="moduleEdit.sortOrder" min="0" />
+                        <button type="button" class="btn btn-primary btn-sm" (click)="saveModule()" [disabled]="savingModule">Save</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm ms-1" (click)="cancelEditModule()">Cancel</button>
+                      </div>
+                    } @else {
+                      <span>{{ m.title }}</span>
+                      <span class="badge bg-secondary ms-1">Step {{ m.sortOrder + 1 }}</span>
+                      @if (m.hasQuiz) {
+                        <span class="badge bg-success ms-1">Quiz</span>
+                      }
+                      <span class="ms-2">
+                        <button type="button" class="btn btn-outline-secondary btn-sm" (click)="startEditModule(m.id)">Edit</button>
+                        @if (!m.hasQuiz) {
+                          <button type="button" class="btn btn-outline-success btn-sm ms-1" (click)="openAddQuiz(m.id)">Add quiz</button>
+                        } @else if (m.quizId) {
+                          <button type="button" class="btn btn-outline-info btn-sm ms-1" (click)="openAddQuestion(m.quizId)">Add question</button>
+                        }
+                        @if (canManage) {
+                          <button type="button" class="btn btn-outline-danger btn-sm ms-1" (click)="deleteModule(m.id)">Delete</button>
+                        }
+                      </span>
+                    }
+                  </li>
+                  @if (addingQuizModuleId === m.id) {
+                    <li class="mb-2 pb-2 bg-white rounded p-2">
+                      <label class="form-label">Quiz name</label>
+                      <input type="text" class="form-control form-control-sm mb-1" [(ngModel)]="quizName" placeholder="Quiz name" />
+                      <label class="form-label">Pass score %</label>
+                      <input type="number" class="form-control form-control-sm mb-1" [(ngModel)]="quizPassScore" min="0" max="100" />
+                      <button type="button" class="btn btn-primary btn-sm" (click)="createQuiz()" [disabled]="creatingQuiz">Create quiz</button>
+                      <button type="button" class="btn btn-outline-secondary btn-sm ms-1" (click)="cancelAddQuiz()">Cancel</button>
+                    </li>
+                  }
+                  @if (addingQuestionQuizId && m.quizId === addingQuestionQuizId) {
+                    <li class="mb-2 pb-2 bg-white rounded p-2">
+                      @if (quizQuestions.length) {
+                        <div class="mb-3">
+                          <strong class="small">Existing questions</strong>
+                          @for (q of quizQuestions; track q.id) {
+                            <div class="d-flex justify-content-between align-items-start gap-2 mt-1 p-2 border rounded">
+                              @if (editingQuestionId === q.id) {
+                                <div class="flex-grow-1 small">
+                                  <input type="text" class="form-control form-control-sm mb-1" [(ngModel)]="editQuestionText" placeholder="Question?" />
+                                  <textarea class="form-control form-control-sm mb-1" [(ngModel)]="editQuestionOptionsStr" rows="2" placeholder="Options"></textarea>
+                                  <input type="number" class="form-control form-control-sm mb-1 w-25" [(ngModel)]="editQuestionCorrectIndex" min="0" />
+                                  <button type="button" class="btn btn-primary btn-sm" (click)="saveQuestion()" [disabled]="savingQuestion">Save</button>
+                                  <button type="button" class="btn btn-outline-secondary btn-sm ms-1" (click)="cancelEditQuestion()">Cancel</button>
+                                </div>
+                              } @else {
+                                <span>{{ q.questionText }} ({{ q.options.length }} options)</span>
+                                <span>
+                                  <button type="button" class="btn btn-link btn-sm p-0" (click)="startEditQuestion(q)">Edit</button>
+                                  <button type="button" class="btn btn-link btn-sm text-danger p-0 ms-1" (click)="deleteQuestion(q.id)">Delete</button>
+                                </span>
+                              }
+                            </div>
+                          }
+                        </div>
+                      }
+                      <label class="form-label">Add new question</label>
+                      <input type="text" class="form-control form-control-sm mb-1" [(ngModel)]="questionText" placeholder="Question?" />
+                      <textarea class="form-control form-control-sm mb-1" [(ngModel)]="questionOptionsStr" rows="2" placeholder="Options (comma- or newline-separated)"></textarea>
+                      <input type="number" class="form-control form-control-sm mb-1 w-25" [(ngModel)]="questionCorrectIndex" min="0" placeholder="Correct index" />
+                      <button type="button" class="btn btn-primary btn-sm" (click)="addQuestion()" [disabled]="addingQuestion">Add question</button>
+                      <button type="button" class="btn btn-outline-danger btn-sm ms-1" (click)="removeQuiz(m.quizId!)">Remove quiz</button>
+                      <button type="button" class="btn btn-outline-secondary btn-sm ms-1" (click)="cancelAddQuestion()">Done</button>
+                    </li>
+                  }
+                }
+              </ul>
+              <h6 class="mb-2 mt-3">Badges (awarded when all modules are completed)</h6>
+              @if (loadingBadges) {
+                <p class="text-muted small mb-0">Loading...</p>
+              } @else if (badges.length === 0 && !addingBadgeCourseId) {
+                <p class="text-muted small mb-2">No badges. Add one to award on course completion.</p>
+                <button type="button" class="btn btn-outline-primary btn-sm" (click)="openAddBadge(c.id)">Add badge</button>
+              } @else {
+                <ul class="list-unstyled mb-2">
+                  @for (b of badges; track b.id) {
+                    <li class="mb-1">
+                      @if (editingBadgeId === b.id) {
+                        <div class="small d-flex gap-2 align-items-end">
+                          <input type="text" class="form-control form-control-sm" [(ngModel)]="editBadgeName" placeholder="Name" style="width: 12rem;" />
+                          <input type="number" class="form-control form-control-sm" [(ngModel)]="editBadgeValidityMonths" min="1" max="120" placeholder="Validity months" style="width: 6rem;" />
+                          <button type="button" class="btn btn-primary btn-sm" (click)="saveBadge()" [disabled]="savingBadge">Save</button>
+                          <button type="button" class="btn btn-outline-secondary btn-sm" (click)="cancelEditBadge()">Cancel</button>
+                        </div>
+                      } @else {
+                        <span>{{ b.name }}</span>
+                        <span class="text-muted small ms-1">(valid {{ b.validityMonths }} months)</span>
+                        <button type="button" class="btn btn-link btn-sm p-0 ms-1" (click)="startEditBadge(b)">Edit</button>
+                        <button type="button" class="btn btn-link btn-sm text-danger p-0 ms-1" (click)="deleteBadge(b.id)">Delete</button>
+                      }
+                    </li>
+                  }
+                </ul>
+                @if (!addingBadgeCourseId) {
+                  <button type="button" class="btn btn-outline-primary btn-sm" (click)="openAddBadge(c.id)">Add badge</button>
+                }
+              }
+              @if (addingBadgeCourseId === c.id) {
+                <div class="small mt-2 p-2 bg-white rounded border">
+                  <label class="form-label">Badge name</label>
+                  <input type="text" class="form-control form-control-sm mb-1" [(ngModel)]="addBadgeName" placeholder="e.g. Safety Certified" />
+                  <label class="form-label">Validity (months)</label>
+                  <input type="number" class="form-control form-control-sm mb-2" [(ngModel)]="addBadgeValidityMonths" min="1" max="120" />
+                  <button type="button" class="btn btn-primary btn-sm" (click)="addBadge()" [disabled]="!addBadgeName.trim() || addingBadge">Create badge</button>
+                  <button type="button" class="btn btn-outline-secondary btn-sm ms-1" (click)="cancelAddBadge()">Cancel</button>
+                </div>
+              }
+            }
+          </div>
+        }
+        @if (addModuleCourseId === c.id) {
+          <div class="list-group-item bg-light">
+            <div class="row g-2 align-items-end">
+              <div class="col-md-4">
+                <label class="form-label">Module title</label>
+                <input type="text" class="form-control" [(ngModel)]="addModuleTitle" placeholder="Module title" />
+              </div>
+              <div class="col-md-2">
+                <label class="form-label">Sort order</label>
+                <input type="number" class="form-control" [(ngModel)]="addModuleSortOrder" min="0" />
+              </div>
+              <div class="col-md-4">
+                <button type="button" class="btn btn-primary btn-sm" (click)="addModule()" [disabled]="!addModuleTitle.trim() || addingModule">
+                  {{ addingModule ? 'Adding…' : 'Add module' }}
+                </button>
+                <button type="button" class="btn btn-outline-secondary btn-sm ms-1" (click)="cancelAddModule()">Cancel</button>
+              </div>
+            </div>
+          </div>
+        }
+      }
+    </div>
+  }
+</div>

@@ -1,0 +1,214 @@
+:host {
+  display: block;
+}
+
+.jc-accordion {
+  margin-bottom: 0.25rem;
+}
+
+.jc-accordion-header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.5rem;
+  width: 100%;
+  padding: 0.35rem 0;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 6px;
+
+  &:hover {
+    background: rgba(0, 0, 0, 0.03);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--bs-primary, #0d6efd);
+    outline-offset: 2px;
+  }
+}
+
+.jc-accordion-chevron {
+  display: inline-block;
+  width: 1.25rem;
+  flex-shrink: 0;
+  font-size: 0.65rem;
+  color: #6c757d;
+  line-height: 1.2;
+}
+
+.jc-accordion-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  margin: 0;
+}
+
+.jc-accordion-body {
+  padding-left: 1.5rem;
+  padding-bottom: 0.25rem;
+}
+
+.detail-item {
+  .detail-label {
+    display: block;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    color: #6c757d;
+    margin-bottom: 0.25rem;
+  }
+  .detail-value {
+    font-weight: 500;
+  }
+}
+
+.permit-card {
+  border-left: 4px solid var(--bs-primary);
+}
+
+.next-action-card {
+  border-left: 4px solid var(--bs-primary) !important;
+}
+
+.workflow-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.workflow-step {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  background: #f8f9fa;
+  border-left: 3px solid transparent;
+
+  &.done {
+    background: rgba(25, 135, 84, 0.08);
+    border-left-color: var(--bs-success);
+  }
+
+  &.in-progress {
+    background: rgba(13, 110, 253, 0.06);
+    border-left-color: var(--bs-primary);
+  }
+
+  /** Invoice issued but not yet paid — distinct from generic in-progress (blue). */
+  &.awaiting-payment {
+    background: rgba(253, 186, 116, 0.2);
+    border-left-color: var(--bs-warning, #fd7e14);
+  }
+}
+
+.workflow-step-icon {
+  flex-shrink: 0;
+  width: 1.5rem;
+  height: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  font-size: 0.9rem;
+  color: #6c757d;
+}
+
+.workflow-step.done .workflow-step-icon {
+  color: var(--bs-success);
+}
+
+.workflow-step.in-progress .workflow-step-icon {
+  color: var(--bs-primary);
+}
+
+.workflow-step.awaiting-payment .workflow-step-icon {
+  color: var(--bs-warning, #fd7e14);
+}
+
+.workflow-step-content {
+  min-width: 0;
+}
+
+.workflow-step-label {
+  font-weight: 600;
+}
+
+.workflow-step-summary {
+  font-size: 0.875rem;
+}
+
+.workflow-sub-items {
+  font-size: 0.8rem;
+}
+
+.flow-horizontal {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  padding-bottom: 0.5rem;
+  gap: 0;
+}
+
+.flow-node-wrapper {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.flow-connector {
+  width: 24px;
+  min-width: 24px;
+  height: 3px;
+  margin: 0 2px;
+  background: repeating-linear-gradient(90deg, #dee2e6 0, #dee2e6 4px, transparent 4px, transparent 8px);
+  align-self: center;
+  margin-bottom: 28px;
+}
+
+.flow-connector-done {
+  background: var(--bs-success, #198754);
+  background-image: none;
+}
+
+.flow-node {
+  border: 2px solid #dee2e6;
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+  min-width: 100px;
+  max-width: 140px;
+  background: #fff;
+  text-align: center;
+  transition: border-color 0.15s, box-shadow 0.15s;
+
+  &.current {
+    border-color: var(--bs-primary, #0d6efd);
+    box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.2);
+  }
+
+  &.done {
+    border-color: var(--bs-success, #198754);
+    background: rgba(25, 135, 84, 0.06);
+  }
+}
+
+.flow-node-label {
+  font-weight: 600;
+  font-size: 0.8rem;
+  margin-bottom: 0.25rem;
+}
+
+.flow-node-summary {
+  font-size: 0.75rem;
+  color: #6c757d;
+  max-width: 100%;
+  display: block;
+}
+
+.flow-node-action {
+  font-size: 0.8rem;
+}

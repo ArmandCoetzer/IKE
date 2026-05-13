@@ -1,0 +1,124 @@
+<div class="container-fluid">
+  <app-breadcrumb [items]="breadcrumbs" />
+  <app-page-header
+    [title]="'Quote ' + (item?.quoteNumber ?? '')"
+    [backBehavior]="returnTo ? 'emit' : 'router'"
+    [backLink]="returnTo ? undefined : '/quotes'"
+    (back)="goBack()">
+    @if (item) {
+      @if (auth.hasPermission('ManagePurchaseOrders')) {
+        <a class="btn btn-outline-secondary btn-sm" [routerLink]="['/quotes', item.id, 'edit']">Edit</a>
+      }
+      <button type="button" class="btn btn-outline-primary btn-sm" (click)="downloadPdf()">Download PDF</button>
+      @if (auth.hasPermission('ManagePurchaseOrders')) {
+        <button type="button" class="btn btn-outline-primary btn-sm" (click)="sendToClient()" [disabled]="sending || item.status === 'Sent' || item.status === 'Accepted'">{{ sending ? 'Sending…' : 'Send to client' }}</button>
+      }
+      @if (isClientUser && item.status === 'Sent') {
+        <button type="button" class="btn btn-success btn-sm" (click)="acceptByClient()" [disabled]="accepting">{{ accepting ? 'Saving…' : 'Accept quote' }}</button>
+      }
+      @if (item.linkedPurchaseOrderId) {
+        <a class="btn btn-outline-secondary btn-sm" [routerLink]="['/purchase-orders', item.linkedPurchaseOrderId]" [queryParams]="returnTo ? { returnTo } : {}">View PO</a>
+      } @else if (auth.hasPermission('ManagePurchaseOrders')) {
+        <a class="btn btn-primary btn-sm" [routerLink]="['/purchase-orders/new']" [queryParams]="createPOQueryParams">Create PO</a>
+      }
+      @if (auth.hasPermission('ManagePurchaseOrders')) {
+        <div class="btn-group btn-group-sm" role="group">
+          <button type="button" class="btn btn-outline-secondary" (click)="setStatus('Draft')" [disabled]="updatingStatus || item.status === 'Draft'">Draft</button>
+          <button type="button" class="btn btn-outline-secondary" (click)="setStatus('Sent')" [disabled]="updatingStatus || item.status === 'Sent' || item.status === 'Accepted'">Sent</button>
+          <button type="button" class="btn btn-outline-secondary" (click)="setStatus('Accepted')" [disabled]="updatingStatus || item.status === 'Accepted' || item.status === 'Draft'">Accepted</button>
+        </div>
+      }
+    }
+  </app-page-header>
+  @if (statusError) {
+    <p class="text-danger mb-2">{{ statusError }}</p>
+  }
+  @if (actionError) {
+    <p class="text-danger mb-2">{{ actionError }}</p>
+  }
+  @if (loading) {
+    <p>Loading...</p>
+  } @else if (error) {
+    <p class="text-danger">{{ error }}</p>
+  } @else if (item) {
+    <div class="card border-0 shadow-sm rounded-3">
+      <div class="card-body p-4">
+        <dl class="row mb-0">
+          <dt class="col-sm-2">Status</dt>
+          <dd class="col-sm-10">{{ item.status }}</dd>
+          <dt class="col-sm-2">Amount</dt>
+          <dd class="col-sm-10">{{ item.currency }} {{ item.amount | number:'1.2-2' }}</dd>
+          <dt class="col-sm-2">Discount</dt>
+          <dd class="col-sm-10">
+            @if (item.discountMode === 'Global') {
+              Global {{ item.globalDiscountPercent || 0 | number:'1.2-2' }}%
+            } @else if (item.discountMode === 'PerItem') {
+              Per-item
+            } @else {
+              None
+            }
+          </dd>
+          <dt class="col-sm-2">Description</dt>
+          <dd class="col-sm-10">{{ item.description }}</dd>
+          <dt class="col-sm-2">Client</dt>
+          <dd class="col-sm-10">{{ item.clientName || '—' }}</dd>
+          <dt class="col-sm-2">Site</dt>
+          <dd class="col-sm-10">{{ item.siteName || '—' }}</dd>
+          @if (item.serviceRequestId) {
+            <dt class="col-sm-2">Request</dt>
+            <dd class="col-sm-10"><a class="btn btn-sm btn-outline-primary" [routerLink]="['/service-requests', item.serviceRequestId]">View request</a></dd>
+          }
+          @if (item.validUntil) {
+            <dt class="col-sm-2">Valid Until</dt>
+            <dd class="col-sm-10">{{ item.validUntil | date:'mediumDate' }}</dd>
+          }
+          @if (item.notes) {
+            <dt class="col-sm-2">Notes</dt>
+            <dd class="col-sm-10">{{ item.notes }}</dd>
+          }
+        </dl>
+        <hr class="my-4" />
+        <h6 class="mb-3">Quote items</h6>
+        @if (hasLineItems) {
+          <div class="tradion-data-table">
+            <div class="table-responsive">
+              <table class="table table-sm align-middle mb-0">
+                <thead>
+                  <tr>
+                    <th>Type</th>
+                    <th>Description</th>
+                    <th>Item</th>
+                    <th class="text-end">Qty</th>
+                    <th class="text-end">Unit price</th>
+                    @if (showPerItemDiscountDetails) {
+                      <th class="text-end">Disc %</th>
+                    }
+                    <th class="text-end">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (li of sortedLineItems | slice:(lineItemsPage - 1) * lineItemsPageSize : lineItemsPage * lineItemsPageSize; track li.id || $index) {
+                    <tr>
+                      <td>{{ li.lineType }}</td>
+                      <td>{{ li.description || '—' }}</td>
+                      <td>{{ li.partName || '—' }}</td>
+                      <td class="text-end">{{ li.quantity | number:'1.0-2' }}</td>
+                      <td class="text-end">{{ item.currency }} {{ li.unitPrice | number:'1.2-2' }}</td>
+                      @if (showPerItemDiscountDetails) {
+                        <td class="text-end">{{ li.discountPercent || 0 | number:'1.2-2' }}</td>
+                      }
+                      <td class="text-end">{{ item.currency }} {{ (li.lineTotal ?? (li.quantity * li.unitPrice)) | number:'1.2-2' }}</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <app-table-pagination [totalCount]="sortedLineItems.length" [page]="lineItemsPage" [pageSize]="lineItemsPageSize" (pageChange)="lineItemsPage = $event" />
+        } @else {
+          <p class="text-muted mb-0">No line items were attached to this quote.</p>
+        }
+      </div>
+    </div>
+  }
+</div>

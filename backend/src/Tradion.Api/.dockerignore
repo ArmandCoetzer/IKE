@@ -1,0 +1,6 @@
+bin
+obj
+uploads
+*.user
+*.suo
+appsettings.Local.json

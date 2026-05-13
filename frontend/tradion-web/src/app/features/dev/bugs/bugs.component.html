@@ -1,0 +1,93 @@
+<div class="container-fluid">
+  <app-page-header title="Bug Log">
+    <button type="button" class="btn btn-outline-secondary btn-sm" (click)="load()" [disabled]="loading">Refresh</button>
+  </app-page-header>
+
+  @if (loading) {
+    <p>Loading...</p>
+  } @else if (error) {
+    <div class="alert alert-danger">{{ error }}</div>
+  } @else {
+    <div class="card border-0 shadow-sm rounded-3">
+      <div class="card-body p-0">
+        <div class="tradion-data-table">
+          <div class="table-responsive">
+            <table class="table table-sm align-middle mb-0">
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Title</th>
+                <th>Description</th>
+                <th>Reported by</th>
+                <th>Images</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (r of rows | slice:(page - 1) * pageSize : page * pageSize; track r.id) {
+                <tr>
+                  <td>{{ r.createdAt | date:'short' }}</td>
+                  <td>{{ r.title || '—' }}</td>
+                  <td class="small">{{ r.description }}</td>
+                  <td>{{ r.userName || r.userId || '—' }}</td>
+                  <td>{{ r.attachmentCount }}</td>
+                  <td>
+                    <button type="button" class="btn btn-sm btn-outline-primary" (click)="openDetail(r.id)">View</button>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+          </div>
+        </div>
+        <app-table-pagination [totalCount]="rows.length" [page]="page" [pageSize]="pageSize" (pageChange)="page = $event" />
+      </div>
+    </div>
+  }
+
+  @if (showModal) {
+    <div class="modal d-block" tabindex="-1" role="dialog" style="background: rgba(0,0,0,.5)">
+      <div class="modal-dialog modal-lg modal-dialog-scrollable" role="document">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">Bug Detail</h5>
+            <button type="button" class="btn-close" (click)="closeModal()" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            @if (loadingDetail) {
+              <p>Loading...</p>
+            } @else if (detailError) {
+              <div class="alert alert-danger">{{ detailError }}</div>
+            } @else if (selected) {
+              <dl class="row">
+                <dt class="col-sm-3">Time</dt>
+                <dd class="col-sm-9">{{ selected.createdAt | date:'short' }}</dd>
+                <dt class="col-sm-3">Title</dt>
+                <dd class="col-sm-9">{{ selected.title || '—' }}</dd>
+                <dt class="col-sm-3">Reported by</dt>
+                <dd class="col-sm-9">{{ selected.userName || selected.userId || '—' }}</dd>
+                <dt class="col-sm-3">Description</dt>
+                <dd class="col-sm-9" style="white-space: pre-wrap;">{{ selected.description }}</dd>
+              </dl>
+              @if (selected.attachments.length > 0) {
+                <h6>Images</h6>
+                <div class="d-flex flex-wrap gap-2">
+                  @for (a of selected.attachments; track a.id) {
+                    @if (attachmentUrls[a.id]) {
+                      <a [href]="attachmentUrls[a.id]" target="_blank" rel="noopener">
+                        <img [src]="attachmentUrls[a.id]" [alt]="a.fileName" style="width: 140px; height: 100px; object-fit: cover; border-radius: 8px; border: 1px solid #dee2e6;" />
+                      </a>
+                    }
+                  }
+                </div>
+              }
+            }
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-secondary" (click)="closeModal()">Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  }
+</div>

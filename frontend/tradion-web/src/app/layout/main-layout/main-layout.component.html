@@ -1,0 +1,235 @@
+<div class="layout-wrapper">
+  @if (loadingIndicator.isLoading()) {
+    <div class="global-loading-bar" aria-hidden="true"></div>
+  }
+  <!-- Top bar: brand, sidebar toggle (mobile), notifications, user menu -->
+  <nav class="topbar navbar navbar-dark bg-primary">
+    <div class="d-flex align-items-center w-100">
+      <button class="btn btn-link text-white d-lg-none me-2 p-2" type="button" (click)="toggleSidebar()" aria-label="Toggle menu">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+      <a class="navbar-brand d-flex align-items-center gap-2 mb-0 text-decoration-none text-white" routerLink="/dashboard">
+        <img src="/logo/tradion-icon.png" alt="Tradion" class="navbar-brand-logo" />
+      </a>
+      @if (auth.role() === 'Client') {
+        <div class="topbar-client-name text-truncate" [title]="clientCompanyName() || 'My company'">
+          {{ clientCompanyName() || 'My company' }}
+        </div>
+      }
+      <ul class="navbar-nav ms-auto flex-row align-items-center gap-1">
+        <li class="nav-item dropdown topbar-dropdown">
+          <button type="button" class="nav-link topbar-btn topbar-btn-with-arrow d-flex align-items-center gap-1 border-0 bg-transparent" (click)="toggleNotifications($event)" [attr.aria-expanded]="notificationsOpen()" aria-label="Notifications">
+            <span class="position-relative d-inline-block">
+              <svg class="topbar-bell-icon" xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.89 2 2 2zm6-6v-5c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z"/></svg>
+              @if (unreadCount() > 0) {
+                <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger small">{{ unreadCount() > 99 ? '99+' : unreadCount() }}</span>
+              }
+            </span>
+            <svg class="topbar-chevron" [class.open]="notificationsOpen()" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 10l5 5 5-5z"/></svg>
+          </button>
+          <div class="topbar-panel topbar-notifications-panel" [class.show]="notificationsOpen()">
+            <div class="topbar-panel-heading">Notifications</div>
+            @if (notificationsLoading()) {
+              <p class="topbar-panel-muted">Loading…</p>
+            } @else if (recentNotifications().length === 0) {
+              <p class="topbar-panel-muted">No notifications</p>
+            } @else {
+              <div class="topbar-notifications-list">
+                @for (n of recentNotifications(); track n.id) {
+                  <a class="topbar-notification-item d-block text-decoration-none text-dark small py-2 px-2 rounded" [class.bg-light]="!n.readAt" [routerLink]="getNotificationLink(n)" (click)="onNotificationClick(n)">
+                    <span class="fw-medium">{{ n.title }}</span>
+                    <span class="text-muted d-block small">{{ n.body }}</span>
+                  </a>
+                }
+              </div>
+            }
+            <hr class="topbar-panel-divider" />
+            <a class="topbar-panel-link" routerLink="/notifications" (click)="notificationsOpen.set(false)">View all</a>
+          </div>
+        </li>
+        <li class="nav-item dropdown topbar-dropdown">
+          <button type="button" class="nav-link topbar-btn topbar-btn-with-arrow d-flex align-items-center gap-1 border-0 bg-transparent" (click)="toggleUserMenu($event)" [attr.aria-expanded]="userMenuOpen()" aria-label="Account">
+            <svg class="topbar-user-icon" xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+            <svg class="topbar-chevron" [class.open]="userMenuOpen()" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 10l5 5 5-5z"/></svg>
+          </button>
+          <div class="topbar-panel topbar-user-panel" [class.show]="userMenuOpen()">
+            <div class="topbar-panel-heading">{{ auth.role() === 'Client' ? (clientCompanyName() || 'My company') : auth.role() }}</div>
+            <hr class="topbar-panel-divider" />
+            <a class="topbar-panel-link d-block" routerLink="/my-account" (click)="userMenuOpen.set(false)">My account</a>
+            <button type="button" class="topbar-panel-link text-start w-100 border-0 bg-transparent" (click)="userMenuOpen.set(false); auth.logout()">Logout</button>
+          </div>
+        </li>
+      </ul>
+    </div>
+  </nav>
+
+  @if (sidebarOpen()) {
+    <div class="sidebar-overlay d-lg-none" (click)="closeSidebar()" aria-hidden="true"></div>
+  }
+
+  <aside class="sidebar" [class.sidebar-open]="sidebarOpen()">
+    <nav class="sidebar-nav">
+      <ul class="nav flex-column">
+        <li class="nav-item">
+          <a class="nav-link" routerLink="/dashboard" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }" (click)="closeSidebar()">Dashboard</a>
+        </li>
+        <!-- Work: core flow (Request → Job card) -->
+        @if (auth.hasPermission('ViewRequests') || auth.hasPermission('ViewJobCards')) {
+          <li class="nav-item sidebar-accordion">
+            <button type="button" class="nav-link sidebar-accordion-head w-100 text-start" (click)="toggleSidebarWork($event)" [attr.aria-expanded]="sidebarWorkOpen()">
+              <span class="sidebar-accordion-title">Work</span>
+              <span class="sidebar-accordion-chevron" [class.open]="sidebarWorkOpen()">▼</span>
+            </button>
+            @if (sidebarWorkOpen()) {
+              <div class="sidebar-accordion-body">
+                @if (auth.hasPermission('CreateJobCards') || auth.hasPermission('ProcessRequests')) {
+                  <a class="nav-link sidebar-accordion-item" routerLink="/start-new-job" routerLinkActive="active" (click)="closeSidebar()">Start new job</a>
+                }
+                @if (auth.hasPermission('ViewRequests')) {
+                  <a class="nav-link sidebar-accordion-item" routerLink="/service-requests" routerLinkActive="active" (click)="closeSidebar()">{{ auth.role() === 'Client' ? 'My requests' : 'Requests' }}</a>
+                }
+                @if (auth.hasPermission('ViewJobCards')) {
+                  @if (auth.role() === 'Client') {
+                    <a class="nav-link sidebar-accordion-item" routerLink="/reports" routerLinkActive="active" (click)="closeSidebar()">My Jobs</a>
+                  } @else {
+                    <a class="nav-link sidebar-accordion-item" routerLink="/job-cards" routerLinkActive="active" (click)="closeSidebar()">Job cards</a>
+                  }
+                  @if (auth.role() !== 'Client') {
+                    <a class="nav-link sidebar-accordion-item" routerLink="/tracking" routerLinkActive="active" (click)="closeSidebar()">Track technicians</a>
+                  }
+                }
+              </div>
+            }
+          </li>
+        }
+        <!-- Finance: Quotes → PO → Invoices (linked flow) -->
+        @if (auth.hasPermission('ViewPurchaseOrders') || auth.hasPermission('ViewReports')) {
+          <li class="nav-item sidebar-accordion">
+            <button type="button" class="nav-link sidebar-accordion-head w-100 text-start" (click)="toggleSidebarFinance($event)" [attr.aria-expanded]="sidebarFinanceOpen()">
+              <span class="sidebar-accordion-title">Finance</span>
+              <span class="sidebar-accordion-chevron" [class.open]="sidebarFinanceOpen()">▼</span>
+            </button>
+            @if (sidebarFinanceOpen()) {
+              <div class="sidebar-accordion-body">
+                @if (auth.hasPermission('ViewPurchaseOrders')) {
+                  <a class="nav-link sidebar-accordion-item" routerLink="/quotes" routerLinkActive="active" (click)="closeSidebar()">Quotes</a>
+                  <a class="nav-link sidebar-accordion-item" routerLink="/purchase-orders" routerLinkActive="active" (click)="closeSidebar()">Purchase orders</a>
+                }
+                @if (auth.hasPermission('ViewReports')) {
+                  <a class="nav-link sidebar-accordion-item" routerLink="/invoices" routerLinkActive="active" (click)="closeSidebar()">Invoices</a>
+                }
+              </div>
+            }
+          </li>
+        }
+        @if (auth.hasPermission('ViewPurchaseOrders') && auth.role() !== 'Client') {
+          <li class="nav-item sidebar-accordion">
+            <button type="button" class="nav-link sidebar-accordion-head w-100 text-start" (click)="toggleSidebarResources($event)" [attr.aria-expanded]="sidebarResourcesOpen()">
+              <span class="sidebar-accordion-title">Stock</span>
+              <span class="sidebar-accordion-chevron" [class.open]="sidebarResourcesOpen()">▼</span>
+            </button>
+            @if (sidebarResourcesOpen()) {
+              <div class="sidebar-accordion-body">
+                <a class="nav-link sidebar-accordion-item" routerLink="/parts" routerLinkActive="active" (click)="closeSidebar()">Stock items</a>
+                <a class="nav-link sidebar-accordion-item" routerLink="/suppliers" routerLinkActive="active" (click)="closeSidebar()">Suppliers</a>
+                <a class="nav-link sidebar-accordion-item" routerLink="/supplier-quote-requests" routerLinkActive="active" (click)="closeSidebar()">Supplier quote requests</a>
+              </div>
+            }
+          </li>
+        }
+        @if (auth.hasPermission('ViewClients') && auth.role() !== 'Client') {
+          <li class="nav-item">
+            <a class="nav-link" routerLink="/clients" routerLinkActive="active" (click)="closeSidebar()">Clients</a>
+          </li>
+        }
+        <!-- Training: My training (take courses) + Course management (admin) -->
+        @if (auth.hasPermission('ViewTraining') || auth.hasPermission('ManageTraining')) {
+        <li class="nav-item sidebar-accordion">
+          <button type="button" class="nav-link sidebar-accordion-head w-100 text-start" (click)="toggleSidebarTraining($event)" [attr.aria-expanded]="sidebarTrainingOpen()">
+            <span class="sidebar-accordion-title">Training</span>
+            <span class="sidebar-accordion-chevron" [class.open]="sidebarTrainingOpen()">▼</span>
+          </button>
+          @if (sidebarTrainingOpen()) {
+            <div class="sidebar-accordion-body">
+              @if (auth.hasPermission('ViewTraining')) {
+                <a class="nav-link sidebar-accordion-item" routerLink="/training" routerLinkActive="active" (click)="closeSidebar()">My training</a>
+              }
+              @if (auth.hasPermission('ManageTraining')) {
+                <a class="nav-link sidebar-accordion-item" routerLink="/training-setup" routerLinkActive="active" (click)="closeSidebar()">Course management</a>
+              }
+            </div>
+          }
+        </li>
+        }
+        @if (auth.hasPermission('ViewReports') && auth.role() !== 'Client') {
+          <li class="nav-item">
+            <a class="nav-link" routerLink="/reports" routerLinkActive="active" (click)="closeSidebar()">Reports</a>
+          </li>
+        }
+        @if (auth.hasPermission('ViewUsers')) {
+          <li class="nav-item">
+            <a class="nav-link" routerLink="/users" routerLinkActive="active" (click)="closeSidebar()">Employees</a>
+          </li>
+        }
+        <li class="nav-item">
+          <a class="nav-link" routerLink="/notifications" routerLinkActive="active" (click)="closeSidebar()">Notifications</a>
+        </li>
+      </ul>
+    </nav>
+  </aside>
+
+  <main class="main-content">
+    <router-outlet />
+  </main>
+
+  <button
+    type="button"
+    class="bug-fab"
+    (click)="openBugModal()"
+    aria-label="Log bug"
+    title="Log bug">
+    <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M14 4V2h-4v2H8v2h8V4h-2zm6 9h-2.09c-.2-.72-.5-1.4-.9-2l1.48-1.48-1.41-1.41L15.6 9.6c-.6-.4-1.28-.7-2-.9V6h-3.2v2.7c-.72.2-1.4.5-2 .9L6.93 8.11 5.52 9.52 7 11c-.4.6-.7 1.28-.9 2H4v2h2.09c.2.72.5 1.4.9 2l-1.47 1.47 1.41 1.41 1.48-1.47c.6.4 1.28.7 2 .9V22h3.2v-2.7c.72-.2 1.4-.5 2-.9l1.48 1.47 1.41-1.41L17 17c.4-.6.7-1.28.9-2H20v-2zm-8 4a4 4 0 1 1 0-8 4 4 0 0 1 0 8z"/></svg>
+  </button>
+
+  @if (bugModalOpen()) {
+    <div class="modal d-block" tabindex="-1" role="dialog" style="background: rgba(0,0,0,.5)">
+      <div class="modal-dialog modal-lg modal-dialog-scrollable" role="document">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">Log a bug</h5>
+            <button type="button" class="btn-close" (click)="closeBugModal()" [disabled]="bugSubmitting" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            @if (bugError) {
+              <div class="alert alert-danger py-2">{{ bugError }}</div>
+            }
+            @if (bugSuccess) {
+              <div class="alert alert-success py-2">{{ bugSuccess }}</div>
+            }
+            <div class="mb-3">
+              <label class="form-label">Title (optional)</label>
+              <input type="text" class="form-control" [(ngModel)]="bugTitle" [disabled]="bugSubmitting" maxlength="256" />
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Description <span class="text-danger">*</span></label>
+              <textarea class="form-control" rows="5" [(ngModel)]="bugDescription" [disabled]="bugSubmitting" required></textarea>
+            </div>
+            <div class="mb-1">
+              <label class="form-label">Images (optional)</label>
+              <input type="file" class="form-control" accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp" multiple (change)="onBugImagesSelected($event)" [disabled]="bugSubmitting" />
+            </div>
+            @if (bugImages.length > 0) {
+              <p class="small text-muted mb-0 mt-1">{{ bugImages.length }} image(s) selected</p>
+            }
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-outline-secondary" (click)="closeBugModal()" [disabled]="bugSubmitting">Cancel</button>
+            <button class="btn btn-primary" (click)="submitBug()" [disabled]="bugSubmitting || !bugDescription.trim()">
+              {{ bugSubmitting ? 'Saving...' : 'Save bug' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  }
+</div>

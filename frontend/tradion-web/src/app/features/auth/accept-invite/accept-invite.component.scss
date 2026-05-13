@@ -1,0 +1,28 @@
+:host {
+  display: block;
+}
+
+.auth-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.auth-card-body {
+  position: relative;
+  padding: 0.5rem 1rem 1rem;
+  padding-top: 12rem;
+}
+
+.auth-brand-logo {
+  position: absolute;
+  bottom: 58%;
+  left: 50%;
+  transform: translateX(-50%);
+  height: 280px;
+  width: auto;
+  max-width: 100%;
+  display: block;
+  object-fit: contain;
+}

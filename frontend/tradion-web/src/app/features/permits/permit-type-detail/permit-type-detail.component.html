@@ -1,0 +1,21 @@
+<div class="container-fluid">
+  <app-page-header [title]="item?.name ?? 'Permit type'" backLink="/permits" />
+  @if (loading) {
+    <p>Loading...</p>
+  } @else if (error) {
+    <p class="text-danger">{{ error }}</p>
+  } @else if (item) {
+    <div class="card border-0 shadow-sm rounded-3">
+      <div class="card-body p-4">
+        <dl class="row mb-0">
+          <dt class="col-sm-2">Description</dt>
+          <dd class="col-sm-10">{{ item.description || '—' }}</dd>
+          <dt class="col-sm-2">Status</dt>
+          <dd class="col-sm-10">{{ item.isActive ? 'Active' : 'Inactive' }}</dd>
+          <dt class="col-sm-2">Created</dt>
+          <dd class="col-sm-10">{{ item.createdAt | date:'medium' }}</dd>
+        </dl>
+      </div>
+    </div>
+  }
+</div>

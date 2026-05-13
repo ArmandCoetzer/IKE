@@ -1,0 +1,101 @@
+<div class="container-fluid">
+  <app-page-header title="Edit client" [backLink]="['/clients', id ?? '']" />
+  @if (loading) {
+    <p>Loading...</p>
+  } @else {
+    @if (error) {
+      <div class="alert alert-danger">{{ error }}</div>
+    }
+
+    <div class="card border-0 shadow-sm rounded-3 mb-4">
+      <div class="card-body p-4">
+        <h2 class="h6 text-uppercase text-muted mb-3">Company</h2>
+        <form (ngSubmit)="saveClient()">
+          <div class="mb-3">
+            <label class="form-label">Company name</label>
+            <input type="text" class="form-control" [(ngModel)]="companyName" name="companyName" required />
+          </div>
+          <div class="row g-3 mb-3">
+            <div class="col-md-6">
+              <label class="form-label">Contact name</label>
+              <input type="text" class="form-control" [(ngModel)]="contactName" name="contactName" />
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Phone</label>
+              <input type="text" class="form-control" [(ngModel)]="phone" name="phone" />
+            </div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Email</label>
+            <input type="email" class="form-control" [(ngModel)]="email" name="email" />
+          </div>
+          <div class="mb-4">
+            <div class="form-check">
+              <input type="checkbox" class="form-check-input" id="isActive" [(ngModel)]="isActive" name="isActive" />
+              <label class="form-check-label" for="isActive">Active</label>
+            </div>
+          </div>
+          <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-primary" [disabled]="submitting">Save company</button>
+            <a [routerLink]="['/clients', id]" class="btn btn-light border">Cancel</a>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="card border-0 shadow-sm rounded-3">
+      <div class="card-body p-4">
+        <h2 class="h6 text-uppercase text-muted mb-3">Sites</h2>
+
+        @for (row of siteRows; track row.id) {
+          <div class="border rounded-3 p-3 mb-3 bg-light bg-opacity-50" [id]="'site-' + row.id">
+            @if (row.error) {
+              <div class="alert alert-danger py-2 small mb-2">{{ row.error }}</div>
+            }
+            <div class="row g-2 align-items-end">
+              <div class="col-md-3">
+                <label class="form-label small mb-1">Site name</label>
+                <input type="text" class="form-control form-control-sm" [(ngModel)]="row.name" [name]="'sn-' + row.id" />
+              </div>
+              <div class="col-md-4">
+                <label class="form-label small mb-1">Address</label>
+                <input type="text" class="form-control form-control-sm" [(ngModel)]="row.address" [name]="'sa-' + row.id" />
+              </div>
+              <div class="col-md-2">
+                <div class="form-check mt-3 mt-md-4">
+                  <input type="checkbox" class="form-check-input" [id]="'act-' + row.id" [(ngModel)]="row.isActive" [name]="'sact-' + row.id" />
+                  <label class="form-check-label small" [for]="'act-' + row.id">Active</label>
+                </div>
+              </div>
+              <div class="col-md-3 text-md-end">
+                <button type="button" class="btn btn-outline-primary btn-sm" [disabled]="row.saving" (click)="saveSiteRow(row)">
+                  {{ row.saving ? 'Saving…' : 'Save site' }}
+                </button>
+              </div>
+            </div>
+          </div>
+        }
+
+        <h3 class="h6 mt-4 mb-2">Add site</h3>
+        @if (newSiteError) {
+          <div class="alert alert-danger py-2 small">{{ newSiteError }}</div>
+        }
+        <div class="row g-2 align-items-end">
+          <div class="col-md-4">
+            <label class="form-label small mb-1">Site name</label>
+            <input type="text" class="form-control form-control-sm" [(ngModel)]="newSiteName" name="newSiteName" />
+          </div>
+          <div class="col-md-5">
+            <label class="form-label small mb-1">Address</label>
+            <input type="text" class="form-control form-control-sm" [(ngModel)]="newSiteAddress" name="newSiteAddress" />
+          </div>
+          <div class="col-md-3 text-md-end">
+            <button type="button" class="btn btn-primary btn-sm" [disabled]="newSiteSaving" (click)="addNewSite()">
+              {{ newSiteSaving ? 'Adding…' : 'Add site' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  }
+</div>

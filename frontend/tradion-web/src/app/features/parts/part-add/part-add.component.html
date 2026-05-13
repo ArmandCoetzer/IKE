@@ -1,0 +1,112 @@
+<div class="container-fluid">
+  <app-page-header
+    title="Add part"
+    [backBehavior]="returnTo ? 'emit' : 'router'"
+    [backLink]="returnTo ? undefined : '/parts'"
+    (back)="goBack()" />
+  <div class="card border-0 shadow-sm rounded-3">
+    <div class="card-body p-4">
+      @if (error) {
+        <div class="alert alert-danger">{{ error }}</div>
+      }
+      <form (ngSubmit)="save()">
+        <div class="row g-3 mb-3 align-items-end">
+          <div class="col-md-8">
+            <label class="form-label">Name</label>
+            <input type="text" class="form-control" [(ngModel)]="name" name="name" required />
+          </div>
+          <div class="col-md-4">
+            <div class="form-check mb-2">
+              <input type="checkbox" class="form-check-input" id="isLabour" [(ngModel)]="isLabour" (ngModelChange)="onIsLabourChange()" name="isLabour" />
+              <label class="form-check-label" for="isLabour">Labour (hours) – not tracked as stock</label>
+            </div>
+          </div>
+        </div>
+        @if (!isLabour) {
+        <div class="mb-3">
+          <label class="form-label">Part number</label>
+          <input type="text" class="form-control" [(ngModel)]="partNumber" name="partNumber" />
+        </div>
+        }
+        <div class="mb-3">
+          <label class="form-label">Description</label>
+          <textarea class="form-control" [(ngModel)]="description" name="description" rows="2"></textarea>
+        </div>
+        <div class="row g-3 mb-3">
+          <div class="col-md-6">
+            <label class="form-label">Unit price (ZAR)</label>
+            <input type="number" class="form-control" [(ngModel)]="unitPrice" name="unitPrice" step="0.01" min="0" />
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">{{ isLabour ? 'Unit (per hour)' : 'Unit' }}</label>
+            @if (isLabour) {
+              <input type="text" class="form-control" [ngModel]="labourUnitDisplay" name="unitLabour" readonly />
+            } @else {
+              <select class="form-select" [(ngModel)]="unit" name="unit">
+                <option value="">— Select unit —</option>
+                @for (u of unitOptions; track u) {
+                  <option [ngValue]="u">{{ u }}</option>
+                }
+              </select>
+            }
+          </div>
+        </div>
+        @if (!isLabour) {
+        <div class="mb-3">
+          <label class="form-label">Supplier {{ isLabour ? '(optional)' : '(required)' }}</label>
+          <select class="form-select" [(ngModel)]="supplierIds" name="supplierIds" multiple (ngModelChange)="onSupplierSelectionChange()">
+            @for (s of suppliers; track s.id) {
+              <option [value]="s.id">{{ s.name }}</option>
+            }
+          </select>
+          <div class="form-text">Select one or more suppliers.</div>
+          <div class="d-flex gap-2 mt-2">
+            <a routerLink="/suppliers" class="btn btn-outline-primary btn-sm">Manage suppliers</a>
+          </div>
+          <div class="row g-2 mt-1">
+            <div class="col-md-4">
+              <input type="text" class="form-control" [(ngModel)]="newSupplierName" name="newSupplierName" placeholder="New supplier name" />
+            </div>
+            <div class="col-md-4">
+              <input type="email" class="form-control" [(ngModel)]="newSupplierEmail" name="newSupplierEmail" placeholder="Supplier email (required)" />
+            </div>
+            <div class="col-md-4">
+              <input type="url" class="form-control" [(ngModel)]="newSupplierWebsiteUrl" name="newSupplierWebsiteUrl" placeholder="Website URL (optional)" />
+            </div>
+            <div class="col-md-4">
+              <input type="text" class="form-control" [(ngModel)]="newSupplierPhone" name="newSupplierPhone" placeholder="Phone (optional)" />
+            </div>
+            <div class="col-md-4">
+              <input type="text" class="form-control" [(ngModel)]="newSupplierContactPerson" name="newSupplierContactPerson" placeholder="Contact person (optional)" />
+            </div>
+            <div class="col-md-4">
+              <button type="button" class="btn btn-outline-secondary w-100" (click)="addSupplierInline()" [disabled]="addingSupplier || !newSupplierName.trim() || !newSupplierEmail.trim()">
+                {{ addingSupplier ? 'Adding…' : 'Add supplier to item' }}
+              </button>
+            </div>
+          </div>
+          <div class="form-text">If the supplier is missing, create it here and it will be auto-selected for this item.</div>
+        </div>
+        }
+        <div class="row g-3 mb-4" *ngIf="!isLabour">
+          <div class="col-md-6">
+            <label class="form-label">Quantity in stock</label>
+            <input type="number" class="form-control" [(ngModel)]="quantity" name="quantity" min="0" required />
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Reorder level</label>
+            <input type="number" class="form-control" [(ngModel)]="reorderLevel" name="reorderLevel" min="0" required />
+          </div>
+        </div>
+        <div class="d-flex gap-2">
+          <button type="submit" class="btn btn-primary" [disabled]="submitting">Save</button>
+          @if (returnTo) {
+          <a (click)="goBack()" class="btn btn-light border" role="button">Cancel</a>
+        } @else {
+          <a routerLink="/parts" class="btn btn-light border">Cancel</a>
+        }
+        </div>
+      </form>
+    </div>
+  </div>
+</div>

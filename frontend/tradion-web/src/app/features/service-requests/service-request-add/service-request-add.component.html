@@ -1,0 +1,52 @@
+<div class="container-fluid">
+  <app-page-header title="Add service request" backLink="/service-requests" />
+  @if (loading) {
+    <p>Loading...</p>
+  } @else {
+    <div class="card border-0 shadow-sm rounded-3">
+      <div class="card-body p-4">
+        @if (error) {
+          <div class="alert alert-danger">{{ error }}</div>
+        }
+        <form (ngSubmit)="save()">
+          <div class="mb-3">
+            <label class="form-label">Site</label>
+            <select class="form-select" [(ngModel)]="siteId" name="siteId" required>
+              <option [ngValue]="null">— Select site —</option>
+              @for (s of sites; track s.id) {
+                <option [ngValue]="s.id">{{ s.name }}</option>
+              }
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Visual evidence (optional)</label>
+            <input type="file" class="form-control" accept=".pdf,.png,.jpg,.jpeg" multiple (change)="onFilesSelected($event)" />
+            <span class="form-text">Photos or PDFs of the issue. PDF, PNG, JPG up to 10 MB each.</span>
+            @if (selectedFiles.length) {
+              <p class="small text-muted mb-0 mt-1">{{ selectedFiles.length }} file(s) selected</p>
+            }
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Description</label>
+            <textarea class="form-control" [(ngModel)]="description" name="description" rows="3" required placeholder="Describe the issue or work needed"></textarea>
+          </div>
+          <div class="row g-3 mb-4">
+            <div class="col-md-4">
+              <label class="form-label">Priority</label>
+              <input type="number" class="form-control" [(ngModel)]="priority" name="priority" min="1" max="5" />
+              <span class="form-text">1 = least urgent, 5 = most urgent.</span>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Due date (optional)</label>
+              <input type="date" class="form-control" [(ngModel)]="optionalDueDate" name="optionalDueDate" />
+            </div>
+          </div>
+          <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-primary" [disabled]="submitting">{{ submitting ? 'Saving...' : 'Save' }}</button>
+            <a routerLink="/service-requests" class="btn btn-light border">Cancel</a>
+          </div>
+        </form>
+      </div>
+    </div>
+  }
+</div>

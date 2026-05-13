@@ -1,0 +1,180 @@
+<div class="container-fluid">
+  <app-page-header
+    title="Add quote"
+    [backBehavior]="returnTo ? 'emit' : 'router'"
+    [backLink]="returnTo ? undefined : '/quotes'"
+    (back)="goBack()" />
+  @if (loading) {
+    <p>Loading...</p>
+  } @else {
+    <div class="card border-0 shadow-sm rounded-3">
+      <div class="card-body p-4">
+        @if (error) {
+          <div class="alert alert-danger">{{ error }}</div>
+        }
+        <form (ngSubmit)="save()">
+          <div class="row g-3 mb-3">
+            <div class="col-md-6">
+              <label class="form-label">Client</label>
+              <select class="form-select" [(ngModel)]="clientId" name="clientId" required [disabled]="fromServiceRequest" (ngModelChange)="onClientChange()">
+                <option [ngValue]="null">— Select client —</option>
+                @for (c of clients; track c.id) {
+                  <option [ngValue]="c.id">{{ c.companyName }}</option>
+                }
+              </select>
+              @if (fromServiceRequest) {
+                <span class="form-text">From selected service request</span>
+              }
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Site</label>
+              <select class="form-select" [(ngModel)]="siteId" name="siteId" required [disabled]="fromServiceRequest || !clientId">
+                <option [ngValue]="null">— Select site —</option>
+                @for (s of sites; track s.id) {
+                  <option [ngValue]="s.id">{{ s.name }}</option>
+                }
+              </select>
+              @if (fromServiceRequest) {
+                <span class="form-text">From selected service request</span>
+              }
+            </div>
+          </div>
+
+          <div class="mb-4">
+            <label class="form-label">Quote type</label>
+            <div class="mb-2">
+              <div class="form-check">
+                <input type="radio" class="form-check-input" id="quoteMaterials" name="quoteInputMode" [value]="'materials'" [(ngModel)]="quoteInputMode" (ngModelChange)="onQuoteInputModeChange('materials')" />
+                <label class="form-check-label" for="quoteMaterials">Build quote with materials (labour &amp; parts)</label>
+              </div>
+              <div class="form-check">
+                <input type="radio" class="form-check-input" id="quoteGuest" name="quoteInputMode" [value]="'guestimation'" [(ngModel)]="quoteInputMode" (ngModelChange)="onQuoteInputModeChange('guestimation')" />
+                <label class="form-check-label" for="quoteGuest">Suggested amount (guestimation)</label>
+              </div>
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Discount strategy</label>
+            <div class="d-flex flex-wrap gap-3">
+              <div class="form-check">
+                <input type="radio" class="form-check-input" id="discountNone" name="discountMode" [value]="'None'" [(ngModel)]="discountMode" (ngModelChange)="onDiscountModeChange('None')" />
+                <label class="form-check-label" for="discountNone">No discount</label>
+              </div>
+              <div class="form-check">
+                <input type="radio" class="form-check-input" id="discountGlobal" name="discountMode" [value]="'Global'" [(ngModel)]="discountMode" (ngModelChange)="onDiscountModeChange('Global')" />
+                <label class="form-check-label" for="discountGlobal">Global discount (%)</label>
+              </div>
+              <div class="form-check">
+                <input type="radio" class="form-check-input" id="discountPerItem" name="discountMode" [value]="'PerItem'" [(ngModel)]="discountMode" (ngModelChange)="onDiscountModeChange('PerItem')" [disabled]="quoteInputMode !== 'materials'" />
+                <label class="form-check-label" for="discountPerItem">Per-item discount (%)</label>
+              </div>
+            </div>
+            @if (discountMode === 'Global') {
+              <div class="mt-2" style="max-width: 14rem;">
+                <input type="number" class="form-control form-control-sm" [(ngModel)]="globalDiscountPercent" name="globalDiscountPercent" min="0" max="100" step="0.01" placeholder="0 - 100" />
+              </div>
+            }
+            @if (quoteInputMode !== 'materials') {
+              <span class="form-text">Per-item discounts are available only in materials mode.</span>
+            }
+          </div>
+
+          @if (quoteInputMode === 'materials') {
+            <div class="mb-3">
+              <label class="form-label">Line items (labour &amp; parts)</label>
+              @if (quoteParts.length === 0) {
+                <p class="text-warning small mb-2">No parts in inventory. Add stock or request from suppliers.</p>
+                <a [routerLink]="['/parts/new']" [queryParams]="{ returnTo: returnTo || '/quotes/new' }" class="btn btn-outline-secondary btn-sm mb-2">+ Add parts</a>
+              } @else {
+                <div class="d-flex gap-2 mb-2">
+                  <button type="button" class="btn btn-outline-secondary btn-sm" (click)="addLineItem('Labour')">+ Labour</button>
+                  <button type="button" class="btn btn-outline-secondary btn-sm" (click)="addLineItem('Part')">+ Part</button>
+                </div>
+                @if (lineItems.length) {
+                  <app-table [compact]="true">
+                    <thead><tr><th>Type</th><th>Item Name</th><th>Description</th><th>Unit</th><th>Qty</th><th>Unit price</th>@if (showPerItemDiscountColumn) {<th>Disc %</th>}<th>Total</th>@if (showPerItemDiscountColumn) {<th>Discounted total</th>}<th></th></tr></thead>
+                    <tbody>
+                      @for (li of lineItems | slice:(lineItemsPage - 1) * lineItemsPageSize : lineItemsPage * lineItemsPageSize; track $index) {
+                        <tr>
+                          <td>{{ li.lineType }}</td>
+                          <td>
+                            <select class="form-select form-select-sm" [(ngModel)]="li.partId" (ngModelChange)="onPartSelect((lineItemsPage - 1) * lineItemsPageSize + $index, $event)" name="part{{(lineItemsPage - 1) * lineItemsPageSize + $index}}">
+                              <option [ngValue]="null">— Select {{ li.lineType === 'Labour' ? 'labour' : 'part' }} —</option>
+                              @for (p of partsForLineType(li.lineType); track p.id) {
+                                <option [ngValue]="p.id">{{ p.name }}{{ p.isLabour ? '' : ' (' + p.quantity + ' in stock)' }}</option>
+                              }
+                            </select>
+                          </td>
+                          <td>
+                            <input type="text" class="form-control form-control-sm" [(ngModel)]="li.description" name="description{{(lineItemsPage - 1) * lineItemsPageSize + $index}}" placeholder="Auto-filled from selected item" readonly />
+                          </td>
+                          <td class="text-nowrap">{{ li.unit || '—' }}</td>
+                          <td><input type="number" class="form-control form-control-sm tradion-line-qty-input" [(ngModel)]="li.quantity" name="qty{{(lineItemsPage - 1) * lineItemsPageSize + $index}}" step="1" min="0" /></td>
+                          <td><input type="number" class="form-control form-control-sm tradion-line-price-input" [(ngModel)]="li.unitPrice" name="price{{(lineItemsPage - 1) * lineItemsPageSize + $index}}" step="0.01" min="0" /></td>
+                          @if (showPerItemDiscountColumn) {
+                            <td>
+                              <input type="number" class="form-control form-control-sm tradion-line-qty-input" [(ngModel)]="li.discountPercent" name="discount{{(lineItemsPage - 1) * lineItemsPageSize + $index}}" step="0.01" min="0" max="100" />
+                            </td>
+                          }
+                          <td class="text-nowrap">R{{ lineSubtotal(li) | number:'1.2-2' }}</td>
+                          @if (showPerItemDiscountColumn) {
+                            <td class="text-nowrap">R{{ lineDiscountedTotal(li) | number:'1.2-2' }} <span class="text-danger small">(-R{{ lineDiscountAmount(li) | number:'1.2-2' }})</span></td>
+                          }
+                          <td><button type="button" class="btn btn-link btn-sm text-danger p-0" (click)="removeLineItem((lineItemsPage - 1) * lineItemsPageSize + $index)">Remove</button></td>
+                        </tr>
+                      }
+                    </tbody>
+                  </app-table>
+                  <app-table-pagination [totalCount]="lineItems.length" [page]="lineItemsPage" [pageSize]="lineItemsPageSize" (pageChange)="lineItemsPage = $event" />
+                  @if (quoteDiscountFromLines > 0) {
+                    <p class="small mb-1 text-muted">Old total (before discount): R{{ quoteSubtotalFromLines | number:'1.2-2' }} <span class="text-danger">(-R{{ quoteDiscountFromLines | number:'1.2-2' }})</span></p>
+                  }
+                  <p class="small mb-2"><strong>Total from lines: R{{ quoteTotalFromLines | number:'1.2-2' }}</strong></p>
+                }
+              }
+            </div>
+          } @else {
+            <div class="mb-3">
+              <label class="form-label">Quote amount</label>
+              <div class="d-flex align-items-center gap-2 flex-wrap">
+                <input type="number" class="form-control" [(ngModel)]="quoteAmount" name="quoteAmount" step="0.01" min="0" [disabled]="deferPricing" placeholder="0.00" style="max-width: 10rem;" />
+                <div class="form-check mb-0">
+                  <input type="checkbox" class="form-check-input" id="deferPricing" [(ngModel)]="deferPricing" name="deferPricing" />
+                  <label class="form-check-label" for="deferPricing">Sort price later (urgent jobs)</label>
+                </div>
+              </div>
+              <span class="form-text">When "Sort price later" is checked, amount can be 0.</span>
+              @if (discountMode === 'Global') {
+                <span class="form-text d-block">Final amount after discount: R{{ effectiveGuestimationAmount | number:'1.2-2' }}</span>
+              }
+            </div>
+          }
+
+          <div class="row g-3 mb-3">
+            <div class="col-md-6">
+              <label class="form-label">Valid until (optional)</label>
+              <input type="date" class="form-control" [(ngModel)]="validUntil" name="validUntil" />
+            </div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Description</label>
+            <textarea class="form-control" [(ngModel)]="description" name="description" rows="2" required placeholder="Brief description of the quote or scope of work"></textarea>
+          </div>
+          <div class="mb-4">
+            <label class="form-label">Notes (optional)</label>
+            <input type="text" class="form-control" [(ngModel)]="notes" name="notes" placeholder="Internal notes" />
+          </div>
+          <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-primary" [disabled]="submitting || !canSave()">Save</button>
+            @if (returnTo) {
+              <a (click)="goBack()" class="btn btn-light border" role="button">Cancel</a>
+            } @else {
+              <a routerLink="/quotes" class="btn btn-light border">Cancel</a>
+            }
+          </div>
+        </form>
+      </div>
+    </div>
+  }
+</div>

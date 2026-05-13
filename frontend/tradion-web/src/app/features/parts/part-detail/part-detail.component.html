@@ -1,0 +1,60 @@
+<div class="container-fluid">
+  <app-page-header [title]="item?.name ?? 'Part'" backLink="/parts">
+    @if (item?.isLowStock && !item?.isLabour && auth.hasPermission('ManagePurchaseOrders')) {
+      @if (canRequestStock()) {
+        <a
+          class="btn btn-outline-warning btn-sm"
+          [routerLink]="['/supplier-quote-requests/new']"
+          [queryParams]="{
+            partId: item!.id,
+            supplierId: item!.supplierId || '',
+            requestedQuantity: stockRequestQuantity(),
+            notes: 'Low stock request: ' + item!.name + ' (have ' + item!.quantity + ', reorder ' + item!.reorderLevel + ')',
+            returnTo: '/parts/' + item!.id
+          }">
+          Request stock
+        </a>
+      } @else if (!item?.isLabour) {
+        <span class="badge bg-danger">Cannot request: supplier email missing</span>
+      }
+    }
+    @if (item) {
+      <a class="btn btn-sm btn-outline-primary" [routerLink]="['/parts', item.id, 'edit']">Edit</a>
+    }
+  </app-page-header>
+  @if (loading) {
+    <p>Loading...</p>
+  } @else if (error) {
+    <p class="text-danger">{{ error }}</p>
+  } @else if (item) {
+    <div class="card border-0 shadow-sm rounded-3">
+      <div class="card-body p-4">
+        <dl class="row mb-0">
+          <dt class="col-sm-2">Part #</dt>
+          <dd class="col-sm-10">{{ item.isLabour ? 'N/A' : (item.partNumber || '—') }}</dd>
+          <dt class="col-sm-2">Quantity</dt>
+          <dd class="col-sm-10">{{ item.isLabour ? 'N/A' : item.quantity }}</dd>
+          <dt class="col-sm-2">Reorder level</dt>
+          <dd class="col-sm-10">{{ item.isLabour ? 'N/A' : item.reorderLevel }}</dd>
+          <dt class="col-sm-2">Supplier</dt>
+          <dd class="col-sm-10">
+            {{ item.isLabour ? 'N/A' : (item.supplierNames?.length ? item.supplierNames?.join(', ') : (item.supplierName || '—')) }}
+            @if (item.isLowStock && !item.isLabour && item.supplierId && !item.hasSupplierEmail) {
+              <span class="badge bg-danger ms-1">Missing supplier email</span>
+            }
+          </dd>
+          <dt class="col-sm-2">Unit price</dt>
+          <dd class="col-sm-10">ZAR {{ item.unitPrice | number:'1.2-2' }}</dd>
+          <dt class="col-sm-2">Unit</dt>
+          <dd class="col-sm-10">{{ (item.unit || '—').toLowerCase() === 'each' ? 'unit/s' : (item.unit || '—') }}</dd>
+          <dt class="col-sm-2">Low stock</dt>
+          <dd class="col-sm-10">{{ item.isLabour ? 'N/A' : (item.isLowStock ? 'Yes' : 'No') }}</dd>
+          @if (item.description) {
+            <dt class="col-sm-2">Description</dt>
+            <dd class="col-sm-10">{{ item.description }}</dd>
+          }
+        </dl>
+      </div>
+    </div>
+  }
+</div>

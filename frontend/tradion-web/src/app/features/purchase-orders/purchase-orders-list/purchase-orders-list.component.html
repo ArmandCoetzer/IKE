@@ -1,0 +1,58 @@
+<div class="container-fluid">
+  <app-page-header title="Purchase Orders">
+    @if (auth.hasPermission('ManagePurchaseOrders')) {
+      <a routerLink="/purchase-orders/new" class="btn btn-primary">Add purchase order</a>
+    }
+  </app-page-header>
+  <div class="tradion-list-toolbar">
+    <input type="text" class="form-control form-control-sm tradion-filter-search" placeholder="Search by PO #, client, site..." [(ngModel)]="searchText" (ngModelChange)="page = 1" />
+    <select class="form-select form-select-sm tradion-filter-select" [(ngModel)]="filterClientId" (ngModelChange)="page = 1">
+      <option value="">All clients</option>
+      @for (c of clients; track c.id) {
+        <option [ngValue]="c.id">{{ c.companyName }}</option>
+      }
+    </select>
+    <span class="text-muted">{{ filtered.length }} of {{ items.length }} purchase order{{ items.length === 1 ? '' : 's' }}</span>
+  </div>
+  @if (loading) {
+    <p>Loading...</p>
+  } @else if (filtered.length === 0) {
+    <div class="card border-0 shadow-sm rounded-3">
+      <div class="card-body text-center py-5">
+        <p class="text-muted mb-2">{{ items.length === 0 ? 'No purchase orders yet.' : 'No POs match your filters.' }}</p>
+        <p class="text-muted small mb-3">{{ items.length === 0 ? 'Add a purchase order to track client POs and link them to quotes.' : 'Try changing the search or filters.' }}</p>
+        @if (auth.hasPermission('ManagePurchaseOrders')) {
+          <a routerLink="/purchase-orders/new" class="btn btn-primary">Add purchase order</a>
+        }
+      </div>
+    </div>
+  } @else {
+    <app-table>
+        <thead>
+          <tr>
+            <th>PO #</th>
+            <th>Client PO #</th>
+            <th>Client</th>
+            <th>Site</th>
+            <th>Amount</th>
+            <th>Created</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (po of filtered | slice:(page - 1) * pageSize : page * pageSize; track po.id) {
+            <tr>
+              <td><span class="fw-semibold">{{ po.poNumber || '—' }}</span></td>
+              <td>{{ po.clientPONumber || '—' }} @if (po.clientPONumber || po.hasClientPOFile) { <span class="badge bg-info ms-1">Client PO</span> } @else { <span class="badge bg-secondary ms-1">Internal</span> }</td>
+              <td>{{ po.clientName || '—' }}</td>
+              <td>{{ po.siteName || '—' }}</td>
+              <td>{{ po.currency }} {{ po.amount | number:'1.2-2' }}</td>
+              <td>{{ po.createdAt | date:'short' }}</td>
+              <td><a class="btn btn-sm btn-outline-primary" [routerLink]="['/purchase-orders', po.id]">View</a></td>
+            </tr>
+          }
+        </tbody>
+      </app-table>
+    <app-table-pagination [totalCount]="filtered.length" [page]="page" [pageSize]="pageSize" (pageChange)="page = $event" />
+  }
+</div>

@@ -1,0 +1,577 @@
+<div class="container-fluid">
+  <app-breadcrumb [items]="[{ label: 'Start new job', path: '/start-new-job' }]" />
+  <app-page-header title="Start new job" backLink="/dashboard" />
+
+  <div class="stepper mb-4">
+    @for (s of [1,2,3,4,5,6]; track s) {
+      <button type="button" class="stepper-dot" [class.active]="step === s" [class.done]="step > s" (click)="goToStep(s)" [attr.aria-label]="'Step ' + s">
+        {{ s }}
+      </button>
+      @if (s < 6) { <span class="stepper-line" [class.done]="step > s"></span> }
+    }
+  </div>
+  <p class="text-muted small mb-4">{{ stepLabels[step - 1] }}</p>
+
+  @if (error) {
+    <div class="alert alert-danger">{{ error }}</div>
+  }
+
+  @if (step === 1) {
+    <div class="card border-0 shadow-sm rounded-3">
+      <div class="card-body p-4">
+        <h2 class="h5 mb-3">How did this start?</h2>
+        <p class="text-muted small mb-3">Is this from a client request, or are you creating or using an existing quote?</p>
+        <div class="mb-3">
+          <div class="form-check">
+            <input type="radio" class="form-check-input" id="startQuote" name="startType" value="quote" [(ngModel)]="startType" />
+            <label class="form-check-label" for="startQuote">We're creating a new quote</label>
+          </div>
+          <div class="form-check">
+            <input type="radio" class="form-check-input" id="startExistingQuote" name="startType" value="existingQuote" [(ngModel)]="startType" />
+            <label class="form-check-label" for="startExistingQuote">Use an existing quote</label>
+          </div>
+          <div class="form-check">
+            <input type="radio" class="form-check-input" id="startRequest" name="startType" value="request" [(ngModel)]="startType" />
+            <label class="form-check-label" for="startRequest">Select an existing service request (then create quote)</label>
+          </div>
+        </div>
+        <div class="mt-4">
+          <button type="button" class="btn btn-light border me-2" (click)="back()">Back</button>
+          <button type="button" class="btn btn-primary" (click)="nextFromStep1()">Next</button>
+        </div>
+      </div>
+    </div>
+  }
+
+  @if (step === 2) {
+    <div class="card border-0 shadow-sm rounded-3">
+      <div class="card-body p-4">
+        <h2 class="h5 mb-3">{{ startType === 'request' ? 'Select service request' : startType === 'existingQuote' ? 'Select existing quote' : 'Quote' }}</h2>
+        @if (startType === 'request') {
+          <p class="text-muted small mb-3">Select an active service request from the client. Client and site will be prepopulated for the quote.</p>
+          @if (loading) {
+            <p class="text-muted">Loading requests…</p>
+          } @else if (activeRequests.length === 0) {
+            <p class="text-warning mb-3">No active requests without a job card. Create a service request from the Service Requests section, or choose a different start type.</p>
+          } @else {
+            <div class="mb-3">
+              <label class="form-label">Service request</label>
+              <select class="form-select" [(ngModel)]="selectedRequestId" name="selectedRequestId">
+                <option [ngValue]="null">— Select request —</option>
+                @for (r of activeRequests; track r.id) {
+                  <option [ngValue]="r.id">{{ r.requestNumber }} — {{ r.siteName || '—' }} — {{ (r.description || '').slice(0, 40) }}{{ (r.description || '').length > 40 ? '…' : '' }} (Priority {{ r.priority }})</option>
+                }
+              </select>
+              @if (selectedRequestId && selectedRequest) {
+                <p class="small text-muted mt-1 mb-0">Site: {{ selectedRequest.siteName }} — {{ selectedRequest.description }}</p>
+              }
+            </div>
+          }
+        } @else {
+          <div class="row g-3 mb-3">
+            <div class="col-md-6">
+              <label class="form-label">Client</label>
+              <select class="form-select" [(ngModel)]="clientId" name="clientId" (ngModelChange)="onClientChange(); onQuoteClientOrSiteChange()">
+                <option [ngValue]="null">— Select client —</option>
+                @for (c of clients; track c.id) {
+                  <option [ngValue]="c.id">{{ c.companyName }}</option>
+                }
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Site</label>
+              <select class="form-select" [(ngModel)]="siteId" name="siteId" [disabled]="!clientId" (ngModelChange)="onQuoteClientOrSiteChange()">
+                <option [ngValue]="null">— Select site —</option>
+                @for (s of sites; track s.id) {
+                  <option [ngValue]="s.id">{{ s.name }}</option>
+                }
+              </select>
+            </div>
+          </div>
+          <p class="mb-2">
+            <button type="button" class="btn btn-outline-secondary btn-sm me-2" [routerLink]="['/clients/new']" [queryParams]="{ returnTo: returnToForQuote }">+ Add new client</button>
+            @if (clientId) {
+              <button type="button" class="btn btn-outline-secondary btn-sm" [routerLink]="['/clients', clientId, 'edit']" [queryParams]="{ returnTo: returnToForQuote }">+ Add site</button>
+            }
+          </p>
+          @if (startType === 'existingQuote') {
+            @if (clientId && siteId) {
+              @if (loading) {
+                <p class="text-muted">Loading quotes…</p>
+              } @else if (existingQuotes.length === 0) {
+                <p class="text-warning mb-3">No existing quotes without a PO for this client and site. Create a quote or choose "We're creating a new quote".</p>
+              } @else {
+                <div class="mb-3">
+                  <label class="form-label">Quote</label>
+                  <select class="form-select" [(ngModel)]="selectedExistingQuoteId" name="selectedExistingQuoteId" (ngModelChange)="onExistingQuoteChange()">
+                    <option [ngValue]="null">— Select quote —</option>
+                    @for (q of existingQuotes; track q.id) {
+                    <option [ngValue]="q.id">{{ q.quoteNumber }} — R{{ q.amount | number:'1.2-2' }} ({{ q.description || 'No description' }})</option>
+                    }
+                  </select>
+                  @if (selectedExistingQuoteId && quoteAmount != null) {
+                    <p class="small text-muted mt-1 mb-0">Amount: R{{ quoteAmount | number:'1.2-2' }}</p>
+                  }
+                </div>
+              }
+            }
+          } @else {
+            <hr class="my-4" />
+            <div class="mb-3">
+              <label class="form-label">Quote type</label>
+              <div class="mb-2">
+                <div class="form-check">
+                  <input type="radio" class="form-check-input" id="quoteMaterials" name="quoteInputMode" [value]="'materials'" [(ngModel)]="quoteInputMode" (ngModelChange)="onQuoteInputModeChange('materials')" />
+                  <label class="form-check-label" for="quoteMaterials">Build quote with materials (labour &amp; parts)</label>
+                </div>
+                <div class="form-check">
+                  <input type="radio" class="form-check-input" id="quoteGuest" name="quoteInputMode" [value]="'guestimation'" [(ngModel)]="quoteInputMode" (ngModelChange)="onQuoteInputModeChange('guestimation')" />
+                  <label class="form-check-label" for="quoteGuest">Suggested amount (guestimation)</label>
+                </div>
+              </div>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Discount strategy</label>
+              <div class="d-flex flex-wrap gap-3">
+                <div class="form-check">
+                  <input type="radio" class="form-check-input" id="wizardDiscountNone" name="quoteDiscountMode" [value]="'None'" [(ngModel)]="quoteDiscountMode" (ngModelChange)="onQuoteDiscountModeChange('None')" />
+                  <label class="form-check-label" for="wizardDiscountNone">No discount</label>
+                </div>
+                <div class="form-check">
+                  <input type="radio" class="form-check-input" id="wizardDiscountGlobal" name="quoteDiscountMode" [value]="'Global'" [(ngModel)]="quoteDiscountMode" (ngModelChange)="onQuoteDiscountModeChange('Global')" />
+                  <label class="form-check-label" for="wizardDiscountGlobal">Global discount (%)</label>
+                </div>
+                <div class="form-check">
+                  <input type="radio" class="form-check-input" id="wizardDiscountPerItem" name="quoteDiscountMode" [value]="'PerItem'" [(ngModel)]="quoteDiscountMode" (ngModelChange)="onQuoteDiscountModeChange('PerItem')" [disabled]="quoteInputMode !== 'materials'" />
+                  <label class="form-check-label" for="wizardDiscountPerItem">Per-item discount (%)</label>
+                </div>
+              </div>
+              @if (quoteDiscountMode === 'Global') {
+                <div class="mt-2" style="max-width: 14rem;">
+                  <input type="number" class="form-control form-control-sm" [(ngModel)]="quoteGlobalDiscountPercent" name="quoteGlobalDiscountPercent" min="0" max="100" step="0.01" placeholder="0 - 100" />
+                </div>
+              }
+            </div>
+            @if (quoteInputMode === 'materials') {
+              <div class="mb-3">
+                <label class="form-label">Line items</label>
+                @if (quoteParts.length === 0) {
+                  <p class="text-warning small mb-2">No parts in inventory. Add stock or request from suppliers.</p>
+                  <button type="button" class="btn btn-outline-secondary btn-sm mb-2" [routerLink]="['/parts/new']" [queryParams]="{ returnTo: returnToForQuote }">+ Add parts</button>
+                } @else {
+                  <div class="d-flex gap-2 mb-2">
+                    <button type="button" class="btn btn-outline-secondary btn-sm" (click)="addQuoteLineItem('Labour')">+ Labour</button>
+                    <button type="button" class="btn btn-outline-secondary btn-sm" (click)="addQuoteLineItem('Part')">+ Part</button>
+                  </div>
+                  @if (quoteLineItems.length) {
+                    <app-table [compact]="true">
+                      <thead><tr><th>Type</th><th>Item Name</th><th>Description</th><th>Unit</th><th>Qty</th><th>Unit price</th>@if (showPerItemDiscountColumn) {<th>Disc %</th>}<th>Total</th>@if (showPerItemDiscountColumn) {<th>Discounted total</th>}<th></th></tr></thead>
+                      <tbody>
+                        @for (li of quoteLineItems | slice:(quoteLineItemsPage - 1) * quoteLineItemsPageSize : quoteLineItemsPage * quoteLineItemsPageSize; track $index) {
+                          <tr>
+                            <td>{{ li.lineType }}</td>
+                            <td>
+                              <select class="form-select form-select-sm" [(ngModel)]="li.partId" (ngModelChange)="onQuotePartSelect((quoteLineItemsPage - 1) * quoteLineItemsPageSize + $index, $event)" name="part{{(quoteLineItemsPage - 1) * quoteLineItemsPageSize + $index}}">
+                                <option [ngValue]="null">— Select {{ li.lineType === 'Labour' ? 'labour' : 'part' }} —</option>
+                                @for (p of partsForLineType(li.lineType); track p.id) {
+                                  <option [ngValue]="p.id">{{ p.name }}{{ p.isLabour ? '' : ' (' + p.quantity + ' in stock)' }}</option>
+                                }
+                              </select>
+                            </td>
+                            <td>
+                              <input type="text" class="form-control form-control-sm" [(ngModel)]="li.description" name="description{{(quoteLineItemsPage - 1) * quoteLineItemsPageSize + $index}}" placeholder="Auto-filled from selected item" readonly />
+                            </td>
+                            <td class="text-nowrap">{{ li.unit || '—' }}</td>
+                            <td><input type="number" class="form-control form-control-sm tradion-line-qty-input" [(ngModel)]="li.quantity" name="qty{{(quoteLineItemsPage - 1) * quoteLineItemsPageSize + $index}}" step="1" min="0" /></td>
+                            <td><input type="number" class="form-control form-control-sm tradion-line-price-input" [(ngModel)]="li.unitPrice" name="price{{(quoteLineItemsPage - 1) * quoteLineItemsPageSize + $index}}" step="0.01" min="0" /></td>
+                            @if (showPerItemDiscountColumn) {
+                              <td>
+                                <input type="number" class="form-control form-control-sm tradion-line-qty-input" [(ngModel)]="li.discountPercent" name="discount{{(quoteLineItemsPage - 1) * quoteLineItemsPageSize + $index}}" step="0.01" min="0" max="100" />
+                              </td>
+                            }
+                            <td class="text-nowrap">R{{ quoteLineSubtotal(li) | number:'1.2-2' }}</td>
+                            @if (showPerItemDiscountColumn) {
+                              <td class="text-nowrap">R{{ quoteLineDiscountedTotal(li) | number:'1.2-2' }} <span class="text-danger small">(-R{{ quoteLineDiscountAmount(li) | number:'1.2-2' }})</span></td>
+                            }
+                            <td><button type="button" class="btn btn-link btn-sm text-danger p-0" (click)="removeQuoteLineItem((quoteLineItemsPage - 1) * quoteLineItemsPageSize + $index)">Remove</button></td>
+                          </tr>
+                        }
+                      </tbody>
+                    </app-table>
+                    <app-table-pagination [totalCount]="quoteLineItems.length" [page]="quoteLineItemsPage" [pageSize]="quoteLineItemsPageSize" (pageChange)="quoteLineItemsPage = $event" />
+                    @if (quoteDiscountFromLines > 0) {
+                      <p class="small mb-1 text-muted">Old total (before discount): R{{ quoteSubtotalFromLines | number:'1.2-2' }} <span class="text-danger">(-R{{ quoteDiscountFromLines | number:'1.2-2' }})</span></p>
+                    }
+                    <p class="small mb-2"><strong>Total from lines: R{{ quoteTotalFromLines | number:'1.2-2' }}</strong></p>
+                  }
+                }
+              </div>
+            } @else {
+              <div class="mb-3">
+                <label class="form-label">Quote amount</label>
+                <div class="d-flex align-items-center gap-2">
+                  <input type="number" class="form-control" [(ngModel)]="quoteAmount" name="quoteAmount" step="0.01" min="0" [disabled]="quoteDeferPricing" placeholder="0.00" style="max-width: 10rem;" />
+                  <div class="form-check mb-0">
+                    <input type="checkbox" class="form-check-input" id="quoteDeferPricing" [(ngModel)]="quoteDeferPricing" name="quoteDeferPricing" />
+                    <label class="form-check-label" for="quoteDeferPricing">Sort price later (urgent jobs)</label>
+                  </div>
+                </div>
+                <span class="form-text">When "Sort price later" is checked, amount can be 0.</span>
+                @if (quoteDiscountMode === 'Global') {
+                  <span class="form-text d-block">Final amount after discount: R{{ effectiveQuoteAmount | number:'1.2-2' }}</span>
+                }
+              </div>
+            }
+            <div class="mb-3">
+              <label class="form-label">Quote description</label>
+              <textarea class="form-control" [(ngModel)]="quoteDescription" name="quoteDescription" rows="2" required placeholder="Brief description or scope of work"></textarea>
+            </div>
+            <div class="row g-3 mb-3">
+              <div class="col-md-6">
+                <label class="form-label">Valid until (optional)</label>
+                <input type="date" class="form-control" [(ngModel)]="quoteValidUntil" name="quoteValidUntil" (click)="openDatePicker($event)" />
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">Notes (optional)</label>
+                <input type="text" class="form-control" [(ngModel)]="quoteNotes" name="quoteNotes" placeholder="Internal notes" />
+              </div>
+            </div>
+          }
+        }
+        <div class="mt-4">
+          <button type="button" class="btn btn-light border me-2" (click)="back()">Back</button>
+          @if (startType === 'request') {
+            <button type="button" class="btn btn-primary" (click)="nextFromStep2()" [disabled]="submitting || !selectedRequestId || activeRequests.length === 0">{{ submitting ? 'Creating…' : 'Next' }}</button>
+          } @else if (startType === 'existingQuote') {
+            <button type="button" class="btn btn-primary" (click)="nextFromStep2()" [disabled]="submitting || !clientId || !siteId || !selectedExistingQuoteId || existingQuotes.length === 0">{{ submitting ? 'Linking…' : 'Next' }}</button>
+          } @else {
+            <button type="button" class="btn btn-primary" (click)="nextFromStep2()" [disabled]="submitting || !clientId || !siteId || !canProceedQuoteStep()">{{ submitting ? 'Creating…' : 'Next' }}</button>
+          }
+        </div>
+      </div>
+    </div>
+  }
+
+  @if (step === 3) {
+    <div class="card border-0 shadow-sm rounded-3">
+      <div class="card-body p-4">
+        <h2 class="h5 mb-3">Request &amp; quote</h2>
+        <p class="text-muted small mb-3">Client and site are from the selected request. Build the quote below.</p>
+        <div class="row g-3 mb-3">
+          <div class="col-md-6">
+            <label class="form-label">Client</label>
+            <input type="text" class="form-control" [value]="clientName" readonly />
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Site</label>
+            <input type="text" class="form-control" [value]="siteName" readonly />
+          </div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Quote type</label>
+          <div class="mb-2">
+            <div class="form-check">
+              <input type="radio" class="form-check-input" id="reqQuoteMaterials" name="quoteInputModeReq" [value]="'materials'" [(ngModel)]="quoteInputMode" (ngModelChange)="onQuoteInputModeChange('materials')" />
+              <label class="form-check-label" for="reqQuoteMaterials">Build quote with materials</label>
+            </div>
+            <div class="form-check">
+              <input type="radio" class="form-check-input" id="reqQuoteGuest" name="quoteInputModeReq" [value]="'guestimation'" [(ngModel)]="quoteInputMode" (ngModelChange)="onQuoteInputModeChange('guestimation')" />
+              <label class="form-check-label" for="reqQuoteGuest">Suggested amount (guestimation)</label>
+            </div>
+          </div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Discount strategy</label>
+          <div class="d-flex flex-wrap gap-3">
+            <div class="form-check">
+              <input type="radio" class="form-check-input" id="wizardReqDiscountNone" name="quoteDiscountModeReq" [value]="'None'" [(ngModel)]="quoteDiscountMode" (ngModelChange)="onQuoteDiscountModeChange('None')" />
+              <label class="form-check-label" for="wizardReqDiscountNone">No discount</label>
+            </div>
+            <div class="form-check">
+              <input type="radio" class="form-check-input" id="wizardReqDiscountGlobal" name="quoteDiscountModeReq" [value]="'Global'" [(ngModel)]="quoteDiscountMode" (ngModelChange)="onQuoteDiscountModeChange('Global')" />
+              <label class="form-check-label" for="wizardReqDiscountGlobal">Global discount (%)</label>
+            </div>
+            <div class="form-check">
+              <input type="radio" class="form-check-input" id="wizardReqDiscountPerItem" name="quoteDiscountModeReq" [value]="'PerItem'" [(ngModel)]="quoteDiscountMode" (ngModelChange)="onQuoteDiscountModeChange('PerItem')" [disabled]="quoteInputMode !== 'materials'" />
+              <label class="form-check-label" for="wizardReqDiscountPerItem">Per-item discount (%)</label>
+            </div>
+          </div>
+          @if (quoteDiscountMode === 'Global') {
+            <div class="mt-2" style="max-width: 14rem;">
+              <input type="number" class="form-control form-control-sm" [(ngModel)]="quoteGlobalDiscountPercent" name="quoteGlobalDiscountPercentReq" min="0" max="100" step="0.01" placeholder="0 - 100" />
+            </div>
+          }
+        </div>
+        @if (quoteInputMode === 'materials') {
+          <div class="mb-3">
+            <label class="form-label">Line items</label>
+            @if (quoteParts.length === 0) {
+              <p class="text-warning small mb-2">No parts in inventory. Add stock or request from suppliers.</p>
+              <button type="button" class="btn btn-outline-secondary btn-sm mb-2" [routerLink]="['/parts/new']" [queryParams]="{ returnTo: returnToForQuote }">+ Add parts</button>
+            } @else {
+              <div class="d-flex gap-2 mb-2">
+                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="addQuoteLineItem('Labour')">+ Labour</button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="addQuoteLineItem('Part')">+ Part</button>
+              </div>
+              @if (quoteLineItems.length) {
+                <app-table [compact]="true">
+                  <thead><tr><th>Type</th><th>Item Name</th><th>Description</th><th>Unit</th><th>Qty</th><th>Unit price</th>@if (showPerItemDiscountColumn) {<th>Disc %</th>}<th>Total</th>@if (showPerItemDiscountColumn) {<th>Discounted total</th>}<th></th></tr></thead>
+                  <tbody>
+                    @for (li of quoteLineItems | slice:(quoteLineItemsPage - 1) * quoteLineItemsPageSize : quoteLineItemsPage * quoteLineItemsPageSize; track $index) {
+                      <tr>
+                        <td>{{ li.lineType }}</td>
+                        <td>
+                          <select class="form-select form-select-sm" [(ngModel)]="li.partId" (ngModelChange)="onQuotePartSelect((quoteLineItemsPage - 1) * quoteLineItemsPageSize + $index, $event)" name="reqpart{{(quoteLineItemsPage - 1) * quoteLineItemsPageSize + $index}}">
+                            <option [ngValue]="null">— Select {{ li.lineType === 'Labour' ? 'labour' : 'part' }} —</option>
+                            @for (p of partsForLineType(li.lineType); track p.id) {
+                              <option [ngValue]="p.id">{{ p.name }}{{ p.isLabour ? '' : ' (' + p.quantity + ' in stock)' }}</option>
+                            }
+                          </select>
+                        </td>
+                        <td>
+                          <input type="text" class="form-control form-control-sm" [(ngModel)]="li.description" name="reqdescription{{(quoteLineItemsPage - 1) * quoteLineItemsPageSize + $index}}" placeholder="Auto-filled from selected item" readonly />
+                        </td>
+                        <td class="text-nowrap">{{ li.unit || '—' }}</td>
+                        <td><input type="number" class="form-control form-control-sm tradion-line-qty-input" [(ngModel)]="li.quantity" name="reqqty{{(quoteLineItemsPage - 1) * quoteLineItemsPageSize + $index}}" step="1" min="0" /></td>
+                        <td><input type="number" class="form-control form-control-sm tradion-line-price-input" [(ngModel)]="li.unitPrice" name="reqprice{{(quoteLineItemsPage - 1) * quoteLineItemsPageSize + $index}}" step="0.01" min="0" /></td>
+                        @if (showPerItemDiscountColumn) {
+                          <td>
+                            <input type="number" class="form-control form-control-sm tradion-line-qty-input" [(ngModel)]="li.discountPercent" name="reqdiscount{{(quoteLineItemsPage - 1) * quoteLineItemsPageSize + $index}}" step="0.01" min="0" max="100" />
+                          </td>
+                        }
+                        <td class="text-nowrap">R{{ quoteLineSubtotal(li) | number:'1.2-2' }}</td>
+                        @if (showPerItemDiscountColumn) {
+                          <td class="text-nowrap">R{{ quoteLineDiscountedTotal(li) | number:'1.2-2' }} <span class="text-danger small">(-R{{ quoteLineDiscountAmount(li) | number:'1.2-2' }})</span></td>
+                        }
+                        <td><button type="button" class="btn btn-link btn-sm text-danger p-0" (click)="removeQuoteLineItem((quoteLineItemsPage - 1) * quoteLineItemsPageSize + $index)">Remove</button></td>
+                      </tr>
+                    }
+                  </tbody>
+                </app-table>
+                <app-table-pagination [totalCount]="quoteLineItems.length" [page]="quoteLineItemsPage" [pageSize]="quoteLineItemsPageSize" (pageChange)="quoteLineItemsPage = $event" />
+                @if (quoteDiscountFromLines > 0) {
+                  <p class="small mb-1 text-muted">Old total (before discount): R{{ quoteSubtotalFromLines | number:'1.2-2' }} <span class="text-danger">(-R{{ quoteDiscountFromLines | number:'1.2-2' }})</span></p>
+                }
+                <p class="small mb-2"><strong>Total from lines: R{{ quoteTotalFromLines | number:'1.2-2' }}</strong></p>
+              }
+            }
+          </div>
+        } @else {
+          <div class="mb-3">
+            <label class="form-label">Quote amount</label>
+            <div class="d-flex align-items-center gap-2">
+              <input type="number" class="form-control" [(ngModel)]="quoteAmount" name="quoteAmountReq" step="0.01" min="0" [disabled]="quoteDeferPricing" placeholder="0.00" style="max-width: 10rem;" />
+              <div class="form-check mb-0">
+                <input type="checkbox" class="form-check-input" id="quoteDeferPricingReq" [(ngModel)]="quoteDeferPricing" name="quoteDeferPricingReq" />
+                <label class="form-check-label" for="quoteDeferPricingReq">Sort price later (urgent jobs)</label>
+              </div>
+            </div>
+            @if (quoteDiscountMode === 'Global') {
+              <span class="form-text d-block">Final amount after discount: R{{ effectiveQuoteAmount | number:'1.2-2' }}</span>
+            }
+          </div>
+        }
+        <div class="mb-3">
+          <label class="form-label">Quote description</label>
+          <textarea class="form-control" [(ngModel)]="quoteDescription" name="quoteDescriptionReq" rows="2" required placeholder="Brief description or scope of work"></textarea>
+        </div>
+        <div class="row g-3 mb-3">
+          <div class="col-md-6">
+            <label class="form-label">Valid until (optional)</label>
+            <input type="date" class="form-control" [(ngModel)]="quoteValidUntil" name="quoteValidUntilReq" (click)="openDatePicker($event)" />
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Notes (optional)</label>
+            <input type="text" class="form-control" [(ngModel)]="quoteNotes" name="quoteNotesReq" placeholder="Internal notes" />
+          </div>
+        </div>
+        <div class="mt-4">
+          <button type="button" class="btn btn-light border me-2" (click)="back()">Back</button>
+          <button type="button" class="btn btn-primary" (click)="nextFromStep3()" [disabled]="submitting || !quoteDescription.trim() || !canProceedQuoteStep()">{{ submitting ? 'Creating…' : 'Next' }}</button>
+        </div>
+      </div>
+    </div>
+  }
+
+  @if (step === 4) {
+    <div class="card border-0 shadow-sm rounded-3">
+      <div class="card-body p-4">
+        <h2 class="h5 mb-3">Purchase order</h2>
+        <p class="text-muted small mb-3">Who provides the PO?</p>
+        <div class="mb-4">
+          <div class="form-check">
+            <input type="radio" class="form-check-input" id="poUs" name="poSource" value="us" [(ngModel)]="poSource" />
+            <label class="form-check-label" for="poUs">We create the PO (client does not send one)</label>
+          </div>
+          @if (poSource === 'us') {
+            <p class="small text-muted ms-4 mb-2">We'll create an internal purchase order linked to the quote.</p>
+          }
+          <div class="form-check">
+            <input type="radio" class="form-check-input" id="poClient" name="poSource" value="client" [(ngModel)]="poSource" />
+            <label class="form-check-label" for="poClient">Client will send a PO (add their PO number and file below)</label>
+          </div>
+          <div class="form-check">
+            <input type="radio" class="form-check-input" id="poLater" name="poSource" value="later" [(ngModel)]="poSource" />
+            <label class="form-check-label" for="poLater">Decide PO later (add or link from job card page)</label>
+          </div>
+          @if (poSource === 'later') {
+            <p class="small text-muted ms-4 mb-2">No PO created now. You can add or link a PO from the job card detail page.</p>
+          }
+        </div>
+        @if (poSource === 'client') {
+          <div class="border rounded p-3 mb-3 bg-light">
+            <div class="mb-2">
+              <label class="form-label small">Client PO number (optional)</label>
+              <input type="text" class="form-control form-control-sm" [(ngModel)]="clientPONumber" name="clientPONumber" placeholder="e.g. PO-2024-001" />
+            </div>
+            <div>
+              <label class="form-label small">Client PO file (optional)</label>
+              <input type="file" class="form-control form-control-sm" accept=".pdf,.png,.jpg,.jpeg" (change)="onClientPOFileSelected($event)" />
+            </div>
+          </div>
+        }
+        <div class="mt-4">
+          <button type="button" class="btn btn-light border me-2" (click)="back()">Back</button>
+          <button type="button" class="btn btn-primary" (click)="nextFromStep4()" [disabled]="submitting">{{ submitting ? 'Creating…' : 'Next' }}</button>
+        </div>
+      </div>
+    </div>
+  }
+
+  @if (step === 5) {
+    <div class="card border-0 shadow-sm rounded-3">
+      <div class="card-body p-4">
+        <h2 class="h5 mb-3">Job setup</h2>
+        <p class="text-muted small mb-3">Set job type and description so technicians know what this job is about.</p>
+        <div class="mb-3">
+          <label class="form-label">Job description / scope (optional)</label>
+          <textarea class="form-control" [(ngModel)]="jobDescription" name="jobDescription" rows="2" placeholder="What we're doing — e.g. installation, repair, inspection"></textarea>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Priority (1=least, 5=most urgent)</label>
+          <select class="form-select" [(ngModel)]="jobPriority" name="jobPriority" style="max-width: 8rem;">
+            @for (p of [1,2,3,4,5]; track p) {
+              <option [ngValue]="p">{{ p }}</option>
+            }
+          </select>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Due date (optional)</label>
+          <input type="date" class="form-control" [(ngModel)]="jobDueDate" name="jobDueDate" style="max-width: 12rem;" (click)="openDatePicker($event)" />
+          @if (jobDueDateInPast) {
+            <p class="text-danger small mb-0 mt-1">Job due date cannot be in the past.</p>
+          }
+          @if (jobDueDateBeforeQuoteValidUntil) {
+            <p class="text-danger small mb-0 mt-1">Quote valid-until must be on or before the job due date. Adjust the due date or go back and change the quote valid-until date.</p>
+          }
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Assigned technicians</label>
+          <p class="text-muted small mb-2">Choose technicians for this job. The first selected technician is set as permit manager automatically. At least one technician is required.</p>
+          @if (requiredBadgeNames.length) {
+            <p class="small mb-2">This job type requires: <span class="badge bg-info">{{ requiredBadgeNames.join(', ') }}</span></p>
+          }
+          @if (!createdJobCardId) {
+            <p class="text-muted small">Save the job first, then return to assign technicians.</p>
+          } @else if (assignableTechnicians.length === 0) {
+            <p class="text-muted small mb-2">No technicians available to assign. Add an employee with the Technician role.</p>
+            <a [routerLink]="['/users/new']" [queryParams]="{ returnTo: returnToForJobSetup, role: 'Technician' }" class="btn btn-outline-primary btn-sm">+ Add technician (employee)</a>
+          } @else {
+            <div class="row g-3">
+              <div class="col-md-5">
+                <label class="form-label small">Add technician</label>
+                <select class="form-select form-select-sm" [(ngModel)]="assignUserId" name="assignTechSelect" (change)="assignUserId && addTechnician(assignUserId); assignUserId = ''">
+                  <option value="">— Select to add —</option>
+                  @for (t of availableTechniciansToAdd; track t.userId) {
+                    <option [ngValue]="t.userId">{{ t.userName || t.userId }}{{ technicianLacksRequiredBadges(t) ? ' ⚠ Missing badge(s)' : '' }}</option>
+                  }
+                  @if (availableTechniciansToAdd.length === 0 && assignableTechnicians.length > 0) {
+                    <option value="" disabled>All technicians selected</option>
+                  }
+                </select>
+              </div>
+              <div class="col-md-7">
+                <label class="form-label small">Selected technicians</label>
+                @if (selectedTechniciansList.length === 0) {
+                  <p class="text-muted small mb-0">No technicians selected yet. Add at least one technician.</p>
+                } @else {
+                  <div class="border rounded p-2 bg-light">
+                    @for (t of selectedTechniciansList; track t.userId) {
+                      <div class="d-flex align-items-center gap-2 py-1">
+                        <span class="flex-grow-1">{{ t.userName || t.userId }} @if (technicianLacksRequiredBadges(t)) { <span class="badge bg-warning text-dark">Missing required badge(s)</span> }</span>
+                        @if ($index === 0) {
+                          <span class="badge bg-warning text-dark">Permit manager</span>
+                        }
+                        <button type="button" class="btn btn-link btn-sm text-danger p-0" (click)="removeTechnician(t.userId)" title="Remove">✕</button>
+                      </div>
+                    }
+                  </div>
+                }
+              </div>
+            </div>
+          }
+        </div>
+        <div class="mt-4">
+          <button type="button" class="btn btn-light border me-2" (click)="back()">Back</button>
+          <button type="button" class="btn btn-primary" (click)="nextFromStep5()" [disabled]="!canProceedFromJobSetup">Next: Review</button>
+        </div>
+        @if (!canProceedFromJobSetup) {
+          @if (!selectedTechnicianIds.length) {
+            <p class="text-warning small mt-2 mb-0">Assign at least one technician before continuing.</p>
+          }
+        }
+      </div>
+    </div>
+  }
+
+  @if (step === 6) {
+    <div class="card border-0 shadow-sm rounded-3">
+      <div class="card-body p-4">
+        <h2 class="h5 mb-3">Review &amp; complete</h2>
+        <p class="text-muted small mb-4">Check everything looks correct, then complete setup. The job card will be ready for technicians.</p>
+
+        <div class="mb-4">
+          <dl class="row mb-0">
+            <dt class="col-sm-3">Client</dt>
+            <dd class="col-sm-9">{{ clientName }}</dd>
+            <dt class="col-sm-3">Site</dt>
+            <dd class="col-sm-9">{{ siteName }}</dd>
+            <dt class="col-sm-3">Quote</dt>
+            <dd class="col-sm-9">{{ quoteSummary }}</dd>
+            <dt class="col-sm-3">Parts</dt>
+            <dd class="col-sm-9">From quote (if any)</dd>
+            <dt class="col-sm-3">Priority</dt>
+            <dd class="col-sm-9">{{ jobPriority }} ({{ jobPriority === 5 ? 'Most urgent' : jobPriority === 1 ? 'Least urgent' : 'Medium' }})</dd>
+            <dt class="col-sm-3">Due date</dt>
+            <dd class="col-sm-9">{{ jobDueDate ? (jobDueDate | date) : '—' }}</dd>
+            <dt class="col-sm-3">Technicians</dt>
+            <dd class="col-sm-9">{{ techniciansSummary }}</dd>
+            @if (jobDescription) {
+              <dt class="col-sm-3">Description</dt>
+              <dd class="col-sm-9">{{ jobDescription }}</dd>
+            }
+          </dl>
+        </div>
+
+        @if (partsInsufficientInQuote.length) {
+          <div class="alert alert-warning mb-4">
+            <strong>Insufficient stock</strong> – review and order stock as needed:
+            @for (p of partsInsufficientInQuote; track p.partName) {
+              <span class="me-2">{{ p.partName }} (need {{ p.need }}, have {{ p.have }})</span>
+            }
+            <p class="mb-0 mt-2 small">You can still complete setup. Use the job card actions to request supplier quotes or order stock.</p>
+          </div>
+        }
+        <div class="mt-4">
+          <button type="button" class="btn btn-light border me-2" (click)="back()">Back</button>
+          <button type="button" class="btn btn-success btn-lg" (click)="createJobAndFinish()" [disabled]="submitting || !canCompleteJobSetup">{{ submitting ? 'Completing…' : 'Approve & complete — send quote & go to job card' }}</button>
+        </div>
+        @if (!canCompleteJobSetup) {
+          <p class="text-warning small mt-2 mb-0">Go back to Job setup: assign at least one technician and resolve any due date issues.</p>
+        } @else if (partsInsufficientInQuote.length) {
+          <p class="text-warning small mt-2 mb-0">Insufficient stock is flagged and can be handled from the job card.</p>
+        }
+      </div>
+    </div>
+  }
+</div>

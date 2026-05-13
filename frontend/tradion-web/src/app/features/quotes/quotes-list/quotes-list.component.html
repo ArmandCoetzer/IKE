@@ -1,0 +1,76 @@
+<div class="container-fluid">
+  <app-page-header title="Quotes">
+    @if (auth.hasPermission('ManagePurchaseOrders')) {
+      <a routerLink="/quotes/new" class="btn btn-primary">Add quote</a>
+    }
+  </app-page-header>
+  <div class="tradion-list-toolbar">
+    <input type="text" class="form-control form-control-sm tradion-filter-search" placeholder="Search by number, client, description..." [(ngModel)]="searchText" (ngModelChange)="page = 1" />
+    <select class="form-select form-select-sm tradion-filter-select" [(ngModel)]="filterClientId" (ngModelChange)="page = 1">
+      <option value="">All clients</option>
+      @for (c of clients; track c.id) {
+        <option [ngValue]="c.id">{{ c.companyName }}</option>
+      }
+    </select>
+    <select class="form-select form-select-sm tradion-filter-select" [(ngModel)]="filterStatus" (ngModelChange)="page = 1">
+      <option value="">All statuses</option>
+      <option value="Draft">Draft</option>
+      <option value="Sent">Sent</option>
+      <option value="Accepted">Accepted</option>
+      <option value="Cancelled">Cancelled</option>
+    </select>
+    <span class="text-muted">{{ filtered.length }} of {{ items.length }} quote{{ items.length === 1 ? '' : 's' }}</span>
+  </div>
+  @if (loading) {
+    <p>Loading...</p>
+  } @else if (filtered.length === 0) {
+    <div class="card border-0 shadow-sm rounded-3">
+      <div class="card-body text-center py-5">
+        <p class="text-muted mb-2">No quotes yet.</p>
+        <p class="text-muted small mb-3">Create your first quote to get started—you can link it to a client and site.</p>
+        @if (auth.hasPermission('ManagePurchaseOrders')) {
+          <a routerLink="/quotes/new" class="btn btn-primary">Add quote</a>
+        }
+      </div>
+    </div>
+  } @else {
+    <app-table>
+        <thead>
+          <tr>
+            <th>Quote #</th>
+            <th>Client</th>
+            <th>Site</th>
+            <th>Amount</th>
+            <th>Status</th>
+            <th>Created</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (q of filtered | slice:(page - 1) * pageSize : page * pageSize; track q.id) {
+            <tr>
+              <td><span class="fw-semibold">{{ q.quoteNumber }}</span></td>
+              <td>{{ q.clientName || '—' }}</td>
+              <td>{{ q.siteName || '—' }}</td>
+              <td>{{ q.currency }} {{ q.amount | number:'1.2-2' }}</td>
+              <td>{{ q.status }} @if (q.linkedPurchaseOrderId) { <span class="badge bg-secondary ms-1" [title]="'PO linked: ' + (q.linkedPurchaseOrderNumber || '')">PO linked</span> }</td>
+              <td>{{ q.createdAt | date:'short' }}</td>
+              <td>
+                <div class="quote-actions">
+                  <a class="btn btn-sm btn-outline-primary" [routerLink]="['/quotes', q.id]">View</a>
+                  <button
+                    type="button"
+                    class="btn btn-sm btn-primary"
+                    (click)="downloadQuotePdf(q)"
+                    [disabled]="downloadingQuoteId === q.id">
+                    {{ downloadingQuoteId === q.id ? 'Downloading…' : 'Download' }}
+                  </button>
+                </div>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </app-table>
+    <app-table-pagination [totalCount]="filtered.length" [page]="page" [pageSize]="pageSize" (pageChange)="page = $event" />
+  }
+</div>

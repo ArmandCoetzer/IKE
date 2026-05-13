@@ -1,0 +1,104 @@
+<div class="container-fluid">
+  <app-page-header title="New supplier quote request">
+    <a routerLink="/suppliers" class="btn btn-outline-primary btn-sm">Add supplier</a>
+  </app-page-header>
+  <div class="card border-0 shadow-sm rounded-3">
+    <div class="card-body p-4">
+      @if (success) {
+        <div class="alert alert-success">{{ success }}</div>
+      }
+      @if (error) {
+        <div class="alert alert-danger">{{ error }}</div>
+      }
+      <form (ngSubmit)="save()">
+        <div class="row g-3 mb-3">
+          <div class="col-md-6">
+            <label class="form-label">Supplier</label>
+            <select class="form-select" [(ngModel)]="supplierId" name="supplierId" required (ngModelChange)="onSupplierChanged()">
+              <option [ngValue]="null">— Select supplier —</option>
+              @for (s of suppliers; track s.id) { <option [ngValue]="s.id">{{ s.name }}</option> }
+            </select>
+          </div>
+        </div>
+        @if (selectedSupplier) {
+          <div class="small text-muted mb-3">
+            Supplier email destination: <strong>{{ selectedSupplier.email || 'Missing email' }}</strong>
+          </div>
+        }
+        <div class="mb-3">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <label class="form-label mb-0">Items</label>
+            @if (canAddMoreItems) {
+              <button type="button" class="btn btn-sm btn-outline-primary" (click)="addLineItem()" [disabled]="!supplierId">Add item</button>
+            }
+          </div>
+          @for (row of lineItems; track $index; let i = $index) {
+            <div class="row g-2 align-items-end mb-2">
+              <div class="col-md-8">
+                <label class="form-label">Part</label>
+                <select class="form-select" [(ngModel)]="row.partId" [name]="'partId' + i" required (ngModelChange)="onLinePartChanged(i)" [disabled]="!supplierId">
+                  <option [ngValue]="null">{{ supplierId ? '— Select part —' : '— Select supplier first —' }}</option>
+                  @for (p of availablePartsForRow(i); track p.id) { <option [ngValue]="p.id">{{ p.name }}</option> }
+                </select>
+              </div>
+              <div class="col-md-3">
+                <label class="form-label">Requested quantity</label>
+                <input type="number" class="form-control" [(ngModel)]="row.requestedQuantity" [name]="'requestedQuantity' + i" min="1" />
+              </div>
+              <div class="col-md-1">
+                <button type="button" class="btn btn-outline-danger btn-sm w-100" (click)="removeLineItem(i)" title="Remove item">×</button>
+              </div>
+            </div>
+          }
+        </div>
+        <div class="mb-4">
+          <label class="form-label">Notes <span class="text-muted small">(This is added below the part request in the draft email, above "Kind regards")</span></label>
+          <textarea class="form-control" rows="4" [(ngModel)]="notes" name="notes"></textarea>
+        </div>
+        <div class="d-flex gap-2">
+          <button type="submit" class="btn btn-primary" [disabled]="submitting">{{ submitting ? 'Building draft…' : 'Create request' }}</button>
+          <a routerLink="/supplier-quote-requests" class="btn btn-light border">Cancel</a>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+@if (showDraftModal) {
+  <div class="modal d-block" tabindex="-1" role="dialog" style="background: rgba(0,0,0,.5)">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable" role="document">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Supplier request draft email</h5>
+          <button type="button" class="btn-close" (click)="cancelDraft()" [disabled]="draftSending" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="row g-3 mb-3">
+            <div class="col-md-8">
+              <label class="form-label">To</label>
+              <input type="email" class="form-control" [(ngModel)]="draftToEmail" />
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Supplier</label>
+              <input type="text" class="form-control" [value]="selectedSupplier?.name || '—'" disabled />
+            </div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Subject</label>
+            <input type="text" class="form-control" [(ngModel)]="draftSubject" />
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Email body</label>
+            <textarea class="form-control" rows="9" [(ngModel)]="draftBody"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" (click)="cancelDraft()" [disabled]="draftSending">Cancel</button>
+          <button type="button" class="btn btn-primary" (click)="sendDraft()" [disabled]="draftSending || !draftToEmail.trim() || !draftSubject.trim() || !draftBody.trim()">
+            {{ draftSending ? 'Sending…' : 'Send and create request' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+}

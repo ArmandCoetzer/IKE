@@ -1,0 +1,29 @@
+<div class="container-fluid">
+  <app-page-header [title]="'Edit invoice ' + (item?.invoiceNumber ?? '')" [backLink]="['/invoices', id ?? '']" />
+  @if (loading) {
+    <p>Loading...</p>
+  } @else if (item) {
+    <div class="card border-0 shadow-sm rounded-3">
+      <div class="card-body p-4">
+        <p class="text-muted small mb-3">Job: {{ item.jobCardNumber }} · {{ item.currency }} {{ item.amount | number:'1.2-2' }}</p>
+        @if (error) {
+          <div class="alert alert-danger">{{ error }}</div>
+        }
+        <form (ngSubmit)="save()">
+          <div class="mb-3">
+            <label class="form-label">Due date</label>
+            <input type="date" class="form-control" [(ngModel)]="dueDate" name="dueDate" required />
+          </div>
+          <div class="mb-4">
+            <label class="form-label">Notes (optional)</label>
+            <input type="text" class="form-control" [(ngModel)]="notes" name="notes" />
+          </div>
+          <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-primary" [disabled]="submitting">Save</button>
+            <a [routerLink]="['/invoices', id]" class="btn btn-light border">Cancel</a>
+          </div>
+        </form>
+      </div>
+    </div>
+  }
+</div>

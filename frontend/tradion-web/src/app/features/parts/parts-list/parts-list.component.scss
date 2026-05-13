@@ -1,0 +1,19 @@
+:host {
+  display: block;
+}
+
+.parts-actions-cell {
+  min-width: 220px;
+}
+
+.parts-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.parts-actions .btn {
+  padding-inline: 0.6rem;
+}

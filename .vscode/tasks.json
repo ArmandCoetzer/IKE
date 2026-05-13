@@ -1,0 +1,22 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "build-api",
+      "type": "shell",
+      "command": "dotnet build",
+      "args": ["backend/src/Tradion.Api/Tradion.Api.csproj"],
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "env": {
+          "HTTP_PROXY": "",
+          "HTTPS_PROXY": "",
+          "ALL_PROXY": "",
+          "http_proxy": "",
+          "https_proxy": ""
+        }
+      },
+      "group": { "kind": "build", "isDefault": true }
+    }
+  ]
+}

@@ -1,0 +1,57 @@
+<div class="container-fluid">
+  <app-page-header [title]="'Edit service request ' + (item?.requestNumber ?? '')" [backLink]="['/service-requests', id ?? '']" />
+  @if (loading) {
+    <p>Loading...</p>
+  } @else if (item) {
+    <div class="card border-0 shadow-sm rounded-3">
+      <div class="card-body p-4">
+        @if (error) {
+          <div class="alert alert-danger">{{ error }}</div>
+        }
+        <form (ngSubmit)="save()">
+          <div class="mb-3">
+            <label class="form-label">Site</label>
+            <select class="form-select" [(ngModel)]="siteId" name="siteId" required>
+              <option [ngValue]="null">— Select site —</option>
+              @for (s of sites; track s.id) {
+                <option [ngValue]="s.id">{{ s.name }}</option>
+              }
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Description</label>
+            <textarea class="form-control" [(ngModel)]="description" name="description" rows="3" required></textarea>
+          </div>
+          <div class="row g-3 mb-3">
+            <div class="col-md-4">
+              <label class="form-label">Priority</label>
+              <input type="number" class="form-control" [(ngModel)]="priority" name="priority" min="1" max="5" />
+              <span class="form-text">Admin can reduce if client inflated priority.</span>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Due date (optional)</label>
+              <input type="date" class="form-control" [(ngModel)]="optionalDueDate" name="optionalDueDate" />
+            </div>
+          </div>
+          <div class="mb-4 border rounded p-3 bg-light">
+            <h6 class="mb-2">Admin: Penalty (if client inflated priority)</h6>
+            <div class="row g-3">
+              <div class="col-md-4">
+                <label class="form-label small">Penalty fee (ZAR)</label>
+                <input type="number" class="form-control form-control-sm" [(ngModel)]="penaltyFee" name="penaltyFee" step="0.01" min="0" placeholder="0.00" />
+              </div>
+              <div class="col-md-8">
+                <label class="form-label small">Penalty note</label>
+                <input type="text" class="form-control form-control-sm" [(ngModel)]="penaltyNote" name="penaltyNote" placeholder="Reason for penalty (e.g. inflated priority)" />
+              </div>
+            </div>
+          </div>
+          <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-primary" [disabled]="submitting">Save</button>
+            <a [routerLink]="['/service-requests', id]" class="btn btn-light border">Cancel</a>
+          </div>
+        </form>
+      </div>
+    </div>
+  }
+</div>

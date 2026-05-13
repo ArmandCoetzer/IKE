@@ -1,0 +1,131 @@
+<div class="container-fluid">
+  <app-breadcrumb [items]="breadcrumbs" />
+  <app-page-header [title]="item?.companyName ?? 'Client profile'" backLink="/clients">
+    @if (item) {
+      <a class="btn btn-sm btn-outline-primary" [routerLink]="['/clients', item.id, 'edit']">Edit</a>
+    }
+  </app-page-header>
+  @if (loading) {
+    <p>Loading...</p>
+  } @else if (error) {
+    <p class="text-danger">{{ error }}</p>
+  } @else if (item) {
+    <div class="card border-0 shadow-sm rounded-3">
+      <div class="card-body p-4">
+        <dl class="row mb-0">
+          <dt class="col-sm-2">Contact</dt>
+          <dd class="col-sm-10">{{ item.contactName || '—' }}</dd>
+          <dt class="col-sm-2">Phone</dt>
+          <dd class="col-sm-10">{{ item.phone || '—' }}</dd>
+          <dt class="col-sm-2">Email</dt>
+          <dd class="col-sm-10">{{ item.email || '—' }}</dd>
+          <dt class="col-sm-2">Status</dt>
+          <dd class="col-sm-10">{{ item.isActive ? 'Active' : 'Inactive' }}</dd>
+        </dl>
+      </div>
+    </div>
+
+    <h2 class="h5 mt-4 mb-2">Sites</h2>
+    @if (sites.length === 0) {
+      <p class="text-muted">No sites for {{ item.companyName }}.</p>
+    } @else {
+      <ul class="list-group mb-4">
+        @for (s of sites; track s.id) {
+          <li class="list-group-item d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div class="d-flex flex-wrap align-items-center gap-2 me-auto">
+              <span class="fw-semibold">{{ s.name }}</span>
+              <span class="text-muted small">{{ s.address || '—' }}</span>
+            </div>
+            <a class="btn btn-sm btn-outline-primary" [routerLink]="['/clients', item.id, 'edit']" [fragment]="'site-' + s.id">Edit</a>
+          </li>
+        }
+      </ul>
+    }
+    <div class="mb-4">
+      <a class="btn btn-sm btn-primary" [routerLink]="['/service-requests/new']" [queryParams]="{ clientId: item.id }">Add service request for {{ item.companyName }}</a>
+    </div>
+
+    <h2 class="h5 mt-4 mb-2">Client portal users</h2>
+    @if (portalUsers.length === 0) {
+      <p class="text-muted mb-4">No portal users linked to {{ item.companyName }}.</p>
+    } @else {
+      <ul class="list-group mb-4">
+        @for (u of portalUsers; track u.id) {
+          <li class="list-group-item d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div>
+              <span class="fw-medium">{{ u.fullName || u.email }}</span>
+              @if (u.fullName) {
+                <span class="text-muted small ms-1">{{ u.email }}</span>
+              }
+            </div>
+            <span>
+              <span class="badge" [class.bg-success]="u.isActive" [class.bg-secondary]="!u.isActive">{{ u.isActive ? 'Active' : 'Inactive' }}</span>
+              @if (u.registrationStatus) {
+                <span class="badge bg-light text-dark border ms-1">{{ u.registrationStatus }}</span>
+              }
+            </span>
+            @if (auth.hasPermission('EditClients')) {
+              <div class="d-flex gap-2">
+                <button class="btn btn-sm btn-outline-primary" [disabled]="portalBusyUserId === u.id" (click)="reInvitePortalUser(u.id)">Re-invite</button>
+                <button class="btn btn-sm" [class.btn-outline-danger]="u.isActive" [class.btn-outline-success]="!u.isActive" [disabled]="portalBusyUserId === u.id" (click)="setPortalUserStatus(u.id, !u.isActive)">
+                  {{ u.isActive ? 'Deactivate' : 'Activate' }}
+                </button>
+              </div>
+            }
+          </li>
+        }
+      </ul>
+    }
+
+    <h2 class="h5 mt-4 mb-2">Quotes</h2>
+    @if (quotes.length === 0) {
+      <p class="text-muted">No quotes for {{ item.companyName }}.</p>
+    } @else {
+      <ul class="list-group mb-4">
+        @for (q of quotes; track q.id) {
+          <li class="list-group-item d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div class="d-flex flex-wrap align-items-center gap-2 me-auto">
+              <span class="fw-semibold">{{ q.quoteNumber }}</span>
+              <span class="text-muted">{{ q.currency }} {{ q.amount | number:'1.2-2' }} — {{ q.status }}</span>
+            </div>
+            <a class="btn btn-sm btn-outline-primary" [routerLink]="['/quotes', q.id]">View</a>
+          </li>
+        }
+      </ul>
+    }
+
+    <h2 class="h5 mt-4 mb-2">Purchase orders</h2>
+    @if (purchaseOrders.length === 0) {
+      <p class="text-muted">No purchase orders for {{ item.companyName }}.</p>
+    } @else {
+      <ul class="list-group mb-4">
+        @for (po of purchaseOrders; track po.id) {
+          <li class="list-group-item d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div class="d-flex flex-wrap align-items-center gap-2 me-auto">
+              <span class="fw-semibold">{{ po.poNumber || '—' }}</span>
+              <span class="text-muted">{{ po.currency }} {{ po.amount | number:'1.2-2' }} — {{ po.status }}</span>
+            </div>
+            <a class="btn btn-sm btn-outline-primary" [routerLink]="['/purchase-orders', po.id]">View</a>
+          </li>
+        }
+      </ul>
+    }
+
+    <h2 class="h5 mt-4 mb-2">Invoices</h2>
+    @if (invoices.length === 0) {
+      <p class="text-muted">No invoices for {{ item.companyName }}.</p>
+    } @else {
+      <ul class="list-group mb-4">
+        @for (inv of invoices; track inv.id) {
+          <li class="list-group-item d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div class="d-flex flex-wrap align-items-center gap-2 me-auto">
+              <span class="fw-semibold">{{ inv.invoiceNumber }}</span>
+              <span class="text-muted">{{ inv.currency }} {{ inv.amount | number:'1.2-2' }} — {{ inv.status }}</span>
+            </div>
+            <a class="btn btn-sm btn-outline-primary" [routerLink]="['/invoices', inv.id]">View</a>
+          </li>
+        }
+      </ul>
+    }
+  }
+</div>

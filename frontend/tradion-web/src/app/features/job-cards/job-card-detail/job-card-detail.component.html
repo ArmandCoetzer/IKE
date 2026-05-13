@@ -1,0 +1,814 @@
+<div class="container-fluid">
+  <app-breadcrumb [items]="breadcrumbs" />
+  <app-page-header
+    [title]="'Job Card ' + (job?.jobCardNumber ?? '')"
+    [backBehavior]="returnTo ? 'emit' : 'router'"
+    [backLink]="returnTo ? undefined : '/job-cards'"
+    (back)="goBack()">
+    @if (job?.id; as id) {
+      <div class="d-flex align-items-center gap-2 flex-wrap">
+        <button type="button" class="btn btn-sm btn-outline-primary" (click)="downloadJobCardPdf()" [disabled]="downloadingPdf">Export PDF</button>
+        @if (!isClientUser) {
+          <button type="button" class="btn btn-sm btn-outline-primary" (click)="emailJobCardToClient()" [disabled]="emailingJobCardPdf || downloadingPdf">
+            {{ emailingJobCardPdf ? 'Sending…' : 'Send to client' }}
+          </button>
+        }
+        @if (!isPaidAndLocked && !isJobCompletedLike && !isClientUser) {
+          @if (canManageJobCard) {
+            @if (job?.blockedReason) {
+              <button type="button" class="btn btn-outline-warning btn-sm" (click)="unblock()" [disabled]="unblocking">Clear block</button>
+            } @else {
+              <button type="button" class="btn btn-outline-warning btn-sm" (click)="showBlockModal = true">Block job</button>
+            }
+          }
+          @if (job?.canActivatePaperPermitMode && canManageJobCard) {
+            <button type="button" class="btn btn-outline-dark btn-sm" (click)="confirmActivatePaperMode()" [disabled]="activatingPaperMode">
+              {{ activatingPaperMode ? 'Switching…' : 'Use Paper permits…' }}
+            </button>
+          }
+          @if (canManageJobCard) {
+            <button type="button" class="btn btn-sm btn-outline-secondary" [routerLink]="['/job-cards', id, 'edit']" [queryParams]="{ returnTo: jobCardReturnUrl }">Edit card</button>
+          }
+        }
+      </div>
+    }
+  </app-page-header>
+
+  @if (jobCardEmailError) {
+    <div class="alert alert-danger py-2 px-3 mb-3 d-flex justify-content-between align-items-center">
+      <span class="small">{{ jobCardEmailError }}</span>
+      <button type="button" class="btn btn-link btn-sm text-danger p-0" (click)="jobCardEmailError = null">Dismiss</button>
+    </div>
+  }
+
+  @if (loading) {
+    <p>Loading...</p>
+  } @else if (error) {
+    <p class="text-danger">{{ error }}</p>
+  } @else if (job) {
+
+    <!-- Visual progress tracker - primary focus -->
+    <div class="card border-0 shadow-sm rounded-3 mb-4" id="job-progress">
+      <div class="card-body p-4">
+        <h5 class="card-title mb-3">Job progress</h5>
+        <p class="text-muted small mb-4">Track the job through its lifecycle from setup to completion.</p>
+        <div class="workflow-progress mb-0">
+          @for (s of workflowSteps; track s.key) {
+            <div
+              class="workflow-step"
+              [class.done]="s.done"
+              [class.in-progress]="s.inProgress && s.variant !== 'awaitingPayment'"
+              [class.awaiting-payment]="s.variant === 'awaitingPayment'">
+              <span class="workflow-step-icon">
+                @if (s.done) { ✓ } @else if (s.inProgress) { ● } @else { ○ }
+              </span>
+              <div class="workflow-step-content flex-grow-1">
+                <div class="d-flex align-items-center flex-wrap gap-2">
+                  <span class="workflow-step-label">{{ s.label }}</span>
+                  @if (s.summary) {
+                    <span class="workflow-step-summary text-muted">{{ s.summary }}</span>
+                  }
+                  @if (s.action?.link?.length) {
+                    <a class="btn btn-sm btn-outline-primary" [routerLink]="s.action!.link!" [queryParams]="s.action!.queryParams || {}">{{ s.action!.label }}</a>
+                  }
+                  @if (s.action?.isButton && s.action?.action) {
+                    <button type="button" class="btn btn-sm btn-outline-primary" (click)="s.action!.action!()">{{ s.action!.label }}</button>
+                  }
+                </div>
+                @if (s.subItems?.length) {
+                  <div class="workflow-sub-items mt-2">
+                    @for (sub of s.subItems; track sub.label) {
+                      <span class="badge me-1 mb-1" [class.bg-success]="sub.done" [class.bg-light]="!sub.done" [class.text-dark]="!sub.done">{{ sub.label }}</span>
+                    }
+                  </div>
+                }
+              </div>
+            </div>
+          }
+        </div>
+      </div>
+    </div>
+
+    @if (job.blockedReason) {
+      <div class="alert alert-warning mb-4">
+        <strong>Job blocked</strong> — Technicians cannot open this job until the block is cleared.
+        <span class="ms-2">{{ job.blockedReason }}</span>
+        @if (canManageJobCard) {
+          <div class="mt-2">
+            <button type="button" class="btn btn-sm btn-outline-primary" (click)="unblock()" [disabled]="unblocking">Clear block (override)</button>
+          </div>
+        }
+      </div>
+    }
+    @if (waExpiredStandstill) {
+      <div class="alert alert-danger mb-4">
+        <strong>Work paused: Work Authorisation expired.</strong>
+        <span class="ms-2">Technicians must complete and sign off the new Work Authorisation draft before site work continues. Incident logging remains available.</span>
+      </div>
+    }
+
+    @if (job.paperPermitMode) {
+      <div class="alert alert-info mb-4">
+        <strong>Paper permit mode.</strong>
+        <span class="ms-2">Technicians record paper references and client sign-off in the app. Coordinators with “Assign technicians” can upload scans of signed paperwork here if needed.</span>
+      </div>
+    }
+
+    @if ((job.status || '').toLowerCase() === 'in progress' && !hasCapturedFinalClientSignature && !isJobCompletedLike && !isPaidAndLocked) {
+      <div class="alert alert-secondary mb-4" id="final-client-signoff" role="status">
+        <strong>Final client sign-off pending.</strong>
+        <span class="ms-2">Assigned technicians capture this on the <strong>technician mobile app</strong> (same signature dialog as permit client sign-off). It is not entered on the web job card.</span>
+      </div>
+    }
+
+    @if (job.budget && job.budget.thresholdAmount > 0) {
+      <div class="card border-0 shadow-sm rounded-3 mb-4" id="job-budget">
+        <div class="card-body p-4">
+          <h5 class="card-title mb-3">Budget progress</h5>
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <span class="text-muted small">{{ job.budget.currency }} {{ job.budget.spentAmount | number:'1.2-2' }} / {{ job.budget.thresholdAmount | number:'1.2-2' }}</span>
+            <span class="badge" [class.bg-warning]="job.budget.workPaused" [class.bg-primary]="!job.budget.workPaused">
+              {{ job.budget.workPaused ? 'Work paused – approval needed' : 'Active' }}
+            </span>
+          </div>
+          <div class="progress" style="height: 10px;">
+            <div class="progress-bar" [class.bg-warning]="job.budget.workPaused" [class.bg-primary]="!job.budget.workPaused" [style.width.%]="Math.min(100, (job.budget.spentAmount / job.budget.thresholdAmount) * 100)"></div>
+          </div>
+          <p class="text-muted small mb-0 mt-2">When threshold is met, work ceases until the client approves continuation.</p>
+        </div>
+      </div>
+    }
+
+    @if (isPaidAndLocked) {
+      <div class="alert alert-info mb-4" role="status">
+        This job card is locked because the invoice is paid. It is view-only.
+      </div>
+    }
+
+    <!-- Details card -->
+    <div class="card border-0 shadow-sm rounded-3 mb-4" id="job-details">
+      <div class="card-body p-4">
+        <h5 class="card-title mb-4">Details</h5>
+        <div class="row g-4">
+          <div class="col-md-6 col-lg-4">
+            <div class="detail-item">
+              <span class="detail-label">Status</span>
+              @if (canManageJobCard) {
+                <select class="form-select form-select-sm" style="max-width: 12rem;" [ngModel]="job.status" (ngModelChange)="setStatus($event)" [disabled]="updatingStatus">
+                  <option value="Open">Open</option>
+                  <option value="In Progress">In Progress</option>
+                  <option value="Completed" [disabled]="terminalCompletionBlocked">Completed</option>
+                  <option value="Closed" [disabled]="terminalCompletionBlocked">Closed</option>
+                </select>
+              } @else {
+                <span class="badge bg-secondary text-uppercase">{{ job.status }}</span>
+              }
+            </div>
+          </div>
+          <div class="col-md-6 col-lg-4">
+            <div class="detail-item">
+              <span class="detail-label">Site</span>
+              <span class="detail-value">{{ job.siteName || '—' }}</span>
+            </div>
+          </div>
+          <div class="col-md-6 col-lg-4">
+            <div class="detail-item">
+              <span class="detail-label">Priority</span>
+              <span class="detail-value">{{ job.priority ?? 3 }} ({{ (job.priority ?? 3) === 5 ? 'Most urgent' : (job.priority ?? 3) === 1 ? 'Least urgent' : 'Medium' }})</span>
+            </div>
+          </div>
+          @if (job.dueDate) {
+            <div class="col-md-6 col-lg-4">
+              <div class="detail-item">
+                <span class="detail-label">Due date</span>
+                <span class="detail-value">{{ job.dueDate | date }}</span>
+              </div>
+            </div>
+          }
+          @if (job.serviceRequestId) {
+            <div class="col-md-6 col-lg-4">
+              <div class="detail-item">
+                <span class="detail-label">Source request</span>
+                <a [routerLink]="['/service-requests', job.serviceRequestId]" class="detail-value text-primary text-decoration-underline">{{ job.serviceRequestNumber || '—' }}</a>
+              </div>
+            </div>
+          }
+          @if (canManageJobCard || (job.assignments?.length ?? 0) > 0) {
+            <div class="col-12">
+              <div class="detail-item">
+                <span class="detail-label">Assigned technicians</span>
+                <div class="detail-value d-flex flex-wrap align-items-center gap-2">
+                  @for (a of job.assignments ?? []; track a.userId) {
+                    <span class="badge bg-primary">{{ a.userName || a.userId }}
+                      @if (a.isPermitManager) {
+                        <span class="badge bg-warning text-dark ms-1">Permit manager</span>
+                      }
+                      @if (canManageJobCard) {
+                        @if (!a.isPermitManager) {
+                          <button type="button" class="btn btn-link btn-sm text-warning p-0 ms-1" (click)="setAsPermitManager(a.userId)" title="Set as permit manager">★</button>
+                        }
+                        <button type="button" class="btn-close btn-close-white btn-close-sm ms-1" (click)="unassign(a.userId)" aria-label="Remove"></button>
+                      }
+                    </span>
+                  }
+                  @if (canManageJobCard) {
+                    <span class="d-inline-flex align-items-center gap-2">
+                      <select class="form-select form-select-sm tradion-filter-select" [(ngModel)]="assignUserId" (change)="assignTechnician()">
+                        <option value="">Add technician…</option>
+                        @for (u of assignableTechnicians; track u.userId) {
+                          <option [value]="u.userId">{{ u.userName || u.userId }}</option>
+                        }
+                      </select>
+                      <label class="form-check form-check-inline mb-0 small">
+                        <input type="checkbox" class="form-check-input" [(ngModel)]="assignAsPermitManager" name="assignAsPermitManager" />
+                        <span class="form-check-label">Permit manager</span>
+                      </label>
+                    </span>
+                  }
+                </div>
+              </div>
+            </div>
+          }
+          @if (job.description) {
+            <div class="col-12">
+              <div class="detail-item">
+                <span class="detail-label">Description</span>
+                <p class="detail-value mb-0">{{ job.description }}</p>
+              </div>
+            </div>
+          }
+          @if (job.permitsRequired) {
+            <div class="col-12">
+              <div class="detail-item">
+                <span class="detail-label">Permits</span>
+                <span class="detail-value">Permit type is determined on-site via the Work Authorisation (master permit).</span>
+                <p class="text-muted small mb-0 mt-1">Technicians must sign permits when on site.</p>
+              </div>
+            </div>
+          }
+          @if (!isClientUser && (job.plannedParts?.length ?? 0) > 0) {
+            <div class="col-12">
+              <div class="detail-item">
+                <span class="detail-label">Planned parts</span>
+                <div class="detail-value">
+                  @for (pp of job.plannedParts ?? []; track pp.partId) {
+                    <span class="badge bg-light text-dark me-1">{{ pp.partName }} × {{ pp.quantity }}</span>
+                  }
+                </div>
+                @if (plannedPartsInsufficientStock.length > 0 && !isPaidAndLocked) {
+                  <div class="mt-2">
+                    <p class="small text-danger mb-2">
+                      Stock shortfalls detected. Request stock directly from Job progress above or from the <a routerLink="/parts" class="text-decoration-underline">parts inventory</a>:
+                    </p>
+                    <ul class="list-unstyled mb-0">
+                      @for (p of plannedPartsInsufficientStock; track p.partId) {
+                        <li class="d-flex align-items-center flex-wrap gap-2 mb-2">
+                          <span class="small">
+                            {{ p.partName }} — need {{ p.quantity }}, have {{ p.stockQuantity }}
+                          </span>
+                          @if (canRequestSupplierStockForPlannedPart(p)) {
+                            <button
+                              type="button"
+                              class="btn btn-sm btn-primary"
+                              (click)="openSupplierDraftModal()">
+                              Request stock
+                            </button>
+                          } @else {
+                            <span class="badge text-bg-secondary">{{ plannedPartSupplierRequestBlockReason(p) }}</span>
+                          }
+                        </li>
+                      }
+                    </ul>
+                  </div>
+                }
+              </div>
+            </div>
+          }
+          @if (job.parts.length > 0) {
+            <div class="col-12">
+              <div class="detail-item">
+                <span class="detail-label">Parts used</span>
+                <div class="detail-value">
+                  @for (part of job.parts; track part.id) {
+                    <span class="badge bg-success-subtle text-success-emphasis me-1 mb-1">
+                      {{ part.brand || 'Part' }}
+                      @if (part.serialNumber) { · SN: {{ part.serialNumber }} }
+                      @if (part.description) { · {{ part.description }} }
+                    </span>
+                  }
+                </div>
+              </div>
+            </div>
+          }
+        </div>
+
+        <hr class="my-4" />
+        <div class="jc-accordion">
+          <button type="button" class="jc-accordion-header" (click)="accDocsOpen = !accDocsOpen" [attr.aria-expanded]="accDocsOpen">
+            <span class="jc-accordion-chevron">{{ accDocsOpen ? '▼' : '▶' }}</span>
+            <span class="jc-accordion-title text-muted">Documents & site photos</span>
+            <span class="badge bg-light text-dark ms-2">{{ job.documents.length }}</span>
+          </button>
+          @if (accDocsOpen) {
+            <div class="jc-accordion-body">
+              @if (job.documents.length) {
+                @if (preWorkDocuments.length) {
+                  <p class="small text-muted mb-1">Pre-work &amp; PPE</p>
+                  <ul class="list-group list-group-flush mb-3">
+                    @for (d of preWorkDocuments; track d.id) {
+                      <li class="list-group-item px-0 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                        <span>
+                          <span class="badge bg-secondary me-1">{{ isJobDocumentImage(d) ? 'Image' : 'Document' }}</span>
+                          {{ d.documentType }} — {{ d.signedByUserName || '—' }} @if (d.purchaseOrderNumber) { (PO: {{ d.purchaseOrderNumber }}) }
+                        </span>
+                        @if (d.filePath) {
+                          <span class="d-inline-flex gap-2">
+                            <button type="button" class="btn btn-sm btn-outline-primary" (click)="viewDocumentFile(d.id)">View</button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" (click)="downloadDocumentFile(d.id)">Download</button>
+                          </span>
+                        }
+                      </li>
+                    }
+                  </ul>
+                }
+                @if (sitePhotoDocuments.length) {
+                  <p class="small text-muted mb-1">Site photos (before / mid / after)</p>
+                  <ul class="list-group list-group-flush mb-3">
+                    @for (d of sitePhotoDocuments; track d.id) {
+                      <li class="list-group-item px-0 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                        <span>
+                          <span class="badge bg-secondary me-1">{{ isJobDocumentImage(d) ? 'Image' : 'Document' }}</span>
+                          {{ d.documentType }} — {{ d.signedByUserName || '—' }} @if (d.notes) { • <span class="text-muted small">{{ formatDocumentNotes(d.notes) }}</span> }
+                        </span>
+                        @if (d.filePath) {
+                          <span class="d-inline-flex gap-2">
+                            <button type="button" class="btn btn-sm btn-outline-primary" (click)="viewDocumentFile(d.id)">View</button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" (click)="downloadDocumentFile(d.id)">Download</button>
+                          </span>
+                        }
+                      </li>
+                    }
+                  </ul>
+                }
+              }
+              <p class="text-muted small mb-0">Site photos and documents are uploaded by technicians via the mobile app.</p>
+            </div>
+          }
+        </div>
+
+        @if (job.permits.length || job.permitsRequired) {
+          <hr class="my-4" />
+          <div class="jc-accordion" id="job-permits">
+            <button type="button" class="jc-accordion-header" (click)="accPermitsOpen = !accPermitsOpen" [attr.aria-expanded]="accPermitsOpen">
+              <span class="jc-accordion-chevron">{{ accPermitsOpen ? '▼' : '▶' }}</span>
+              <span class="jc-accordion-title text-muted">Permits</span>
+              @if (job.paperPermitMode) {
+                <span class="badge bg-secondary ms-2">Paper</span>
+              }
+              <span class="badge bg-light text-dark ms-2">{{ job.permits.length }}</span>
+            </button>
+            @if (accPermitsOpen) {
+              <div class="jc-accordion-body">
+          @if (permitError) {
+            <div class="alert alert-danger py-2 px-3 mb-3 d-flex justify-content-between align-items-center">
+              <span class="small">{{ permitError }}</span>
+              <button type="button" class="btn btn-link btn-sm text-danger p-0" (click)="permitError = null">Dismiss</button>
+            </div>
+          }
+          @if (job.permits.length) {
+            @if (job.activePermitName) {
+              <p class="small mb-2"><span class="badge bg-primary">Active permit</span> {{ formatPermitDisplayName(job.activePermitName) }} (set by technicians on site)</p>
+            }
+            <div class="permits-list">
+              @for (p of sortedPermits; track p.id) {
+                <div class="permit-card card mb-3" [class.border-success]="isPermitDone(p)" [style.background-color]="isPermitDone(p) ? 'rgba(25, 135, 84, 0.06)' : null">
+                  <div class="card-body py-3">
+                    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+                      <div>
+                        @if (p.isWorkAuthorisation) {
+                          <span class="badge bg-info me-1">Work auth</span>
+                        }
+                        <strong>{{ formatPermitDisplayName(p.permitTemplateName) || 'Permit' }}</strong>
+                        <span class="badge ms-2" [ngClass]="permitStatusBadgeClasses(p)">{{ p.status }}</span>
+                        @if (isPermitExpired(p) && !isPermitDone(p)) {
+                          <span class="badge bg-danger ms-1">Expired</span>
+                        } @else if (isPermitExpiringSoon(p)) {
+                          <span class="badge bg-warning text-dark ms-1">Expiring soon</span>
+                        }
+                        @if (p.approvedAt) {
+                          <span class="text-muted small ms-2">({{ p.approvedAt | date:'short' }})</span>
+                        }
+                        @if (p.validTo) {
+                          <span class="text-muted small ms-1">→ {{ p.validTo | date:'short' }}</span>
+                          @if (permitTimeLeft(p)) {
+                            <span class="text-muted small ms-1">({{ permitTimeLeft(p) }})</span>
+                          }
+                        }
+                        @if (job.paperPermitMode && p.paperPermitNumber) {
+                          <div class="small text-muted mt-1">Paper ref: <strong class="text-dark">{{ p.paperPermitNumber }}</strong></div>
+                        }
+                      </div>
+                    </div>
+                    @if (permitExpiredActionMode(p) === 'readonly-superseded') {
+                      <p class="text-muted small mb-0 mt-3">
+                        A newer permit has been requested for this job. This expired permit has no further actions.
+                      </p>
+                    } @else if (permitExpiredActionMode(p) === 'replacement-only') {
+                      @if (canUserRequestPermitReplacement && !isPaidAndLocked) {
+                        <div class="mt-3">
+                          @if (p.isWorkAuthorisation) {
+                            <button
+                              type="button"
+                              class="btn btn-primary btn-sm"
+                              (click)="requestReplacementPermit(p)"
+                              [disabled]="requestingPermitReplacementId === p.id">
+                              {{ requestingPermitReplacementId === p.id ? 'Requesting…' : 'Request new Work Authorisation' }}
+                            </button>
+                          } @else if (canRequestExpiredChildReplacement(p)) {
+                            <button
+                              type="button"
+                              class="btn btn-primary btn-sm"
+                              (click)="requestReplacementPermit(p)"
+                              [disabled]="requestingPermitReplacementId === p.id">
+                              {{ requestingPermitReplacementId === p.id ? 'Requesting…' : 'Request new ' + (formatPermitDisplayName(p.permitTemplateName) || 'permit') }}
+                            </button>
+                          } @else {
+                            <p class="text-muted small mb-0">
+                              Renew the Work Authorisation before a replacement {{ formatPermitDisplayName(p.permitTemplateName) || 'permit' }} can be requested.
+                            </p>
+                          }
+                        </div>
+                      } @else {
+                        <p class="text-muted small mb-0 mt-3">
+                          This permit has expired. An assigned permit manager can request a replacement from this job card.
+                        </p>
+                      }
+                    } @else {
+                      @if ((p.attachments || []).length > 0) {
+                        <ul class="list-unstyled mt-3 mb-0">
+                          @for (att of (p.attachments || []); track att.id) {
+                            <li class="d-flex align-items-center flex-wrap gap-2 py-1">
+                              @if (isPermitSignatureAttachment(att.fileName)) {
+                                <span class="text-success small fw-semibold">Signed off</span>
+                                <span class="text-muted small">({{ att.uploadedAt | date:'short' }})</span>
+                              } @else {
+                                <span class="text-muted small">📄 {{ att.fileName }}</span>
+                                <span class="text-muted small">({{ att.uploadedAt | date:'short' }})</span>
+                                @if (!job.paperPermitMode) {
+                                  <button type="button" class="btn btn-sm btn-outline-primary" (click)="viewPermitAttachment(att.id, att.fileName)">View</button>
+                                }
+                                <button type="button" class="btn btn-sm btn-outline-secondary" (click)="downloadPermitAttachment(att.id, att.fileName)">Download</button>
+                              }
+                            </li>
+                          }
+                        </ul>
+                      } @else {
+                        <p class="text-muted small mb-0 mt-2">No permit documents uploaded yet.</p>
+                      }
+                      @if (canManageJobCard) {
+                        <div class="mt-2">
+                          <label class="btn btn-sm btn-outline-primary mb-0">
+                            {{ uploadingPermitId === p.id ? 'Uploading…' : 'Upload physical copy' }}
+                            <input
+                              type="file"
+                              class="d-none"
+                              accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg"
+                              (change)="onPermitFileSelected(p.id, $event)"
+                              [disabled]="uploadingPermitId === p.id" />
+                          </label>
+                        </div>
+                      }
+                      @if (p.isWorkAuthorisation) {
+                        @if (!job.paperPermitMode) {
+                          <div class="d-flex gap-2 mt-3 flex-wrap">
+                            <button type="button" class="btn btn-sm btn-outline-primary" (click)="openWorkAuthPreview(p.id, p.permitTemplateName)" [disabled]="previewingWorkAuthId === p.id">
+                              {{ previewingWorkAuthId === p.id ? 'Loading…' : 'Preview permit' }}
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" (click)="downloadWorkAuthPdf(p.id, p.permitTemplateName)" [disabled]="downloadingWorkAuthId === p.id">
+                              {{ downloadingWorkAuthId === p.id ? 'Downloading…' : 'Download PDF' }}
+                            </button>
+                            @if (canManageJobCard) {
+                              <button type="button" class="btn btn-outline-success btn-sm" (click)="emailWorkAuthClient(p.id)" [disabled]="emailingWorkAuthId === p.id">
+                                {{ emailingWorkAuthId === p.id ? 'Sending…' : 'Email client' }}
+                              </button>
+                            }
+                          </div>
+                        } @else {
+                          <p class="text-muted small mb-0 mt-3">Digital Work Authorisation preview is not used in paper mode.</p>
+                        }
+                      } @else {
+                        @if (!job.paperPermitMode) {
+                          <div class="d-flex gap-2 mt-3 flex-wrap">
+                            <button type="button" class="btn btn-sm btn-outline-secondary" (click)="downloadChildPermitPdf(p.id, p.permitTemplateName)" [disabled]="downloadingChildPermitPdfId === p.id">
+                              {{ downloadingChildPermitPdfId === p.id ? 'Downloading…' : 'Download PDF' }}
+                            </button>
+                            @if (canManageJobCard) {
+                              <button type="button" class="btn btn-outline-success btn-sm" (click)="emailChildPermitToClient(p.id)" [disabled]="emailingChildPermitId === p.id">
+                                {{ emailingChildPermitId === p.id ? 'Sending…' : 'Email client' }}
+                              </button>
+                            }
+                          </div>
+                        }
+                      }
+                    }
+                  </div>
+                </div>
+              }
+            </div>
+          } @else if (job.permitsRequired) {
+            <p class="text-muted small mb-2">Permits are handled by technicians on site.</p>
+          }
+              </div>
+            }
+          </div>
+        }
+
+        <hr class="my-4" />
+        <div class="jc-accordion">
+          <button type="button" class="jc-accordion-header" (click)="accIncidentsOpen = !accIncidentsOpen" [attr.aria-expanded]="accIncidentsOpen">
+            <span class="jc-accordion-chevron">{{ accIncidentsOpen ? '▼' : '▶' }}</span>
+            <span class="jc-accordion-title text-muted">Incident reports</span>
+            <span class="badge bg-light text-dark ms-2">{{ job.incidentReports.length }}</span>
+          </button>
+          @if (accIncidentsOpen) {
+            <div class="jc-accordion-body">
+              @if (job.activePermitName) {
+                <p class="small mb-2"><span class="badge bg-primary">Active permit</span> {{ formatPermitDisplayName(job.activePermitName) }}</p>
+              }
+              @if (job.incidentReports.length) {
+                <ul class="list-group list-group-flush mb-3">
+                  @for (ir of job.incidentReports; track ir.id) {
+                    <li class="list-group-item px-0">
+                      <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                          {{ ir.description }} — <span class="badge" [class.bg-secondary]="(ir.status || 'Open') === 'Open'" [class.bg-success]="(ir.status || 'Open') === 'Resolved'">{{ ir.status || 'Open' }}</span>
+                          <span class="badge ms-1"
+                            [class.bg-danger]="(ir.severity || '').toLowerCase() === 'critical' || (ir.severity || '').toLowerCase() === 'high'"
+                            [class.bg-warning]="(ir.severity || '').toLowerCase() === 'medium'"
+                            [class.text-dark]="(ir.severity || '').toLowerCase() === 'medium'"
+                            [class.bg-info]="(ir.severity || '').toLowerCase() === 'low'">
+                            {{ ir.severity || '—' }}
+                          </span>
+                          ({{ ir.createdAt | date:'short' }})
+                          @if (ir.resolution) {
+                            <p class="small text-muted mb-0 mt-1">Resolution: {{ ir.resolution }}</p>
+                          }
+                          @if ((ir.photoPaths || []).length) {
+                            <div class="d-flex gap-1 mt-2">
+                              @for (path of ir.photoPaths; track $index; let i = $index) {
+                                <a href="#" (click)="openIncidentPhoto(ir.id, i); $event.preventDefault()" class="small">Photo {{ i + 1 }}</a>
+                              }
+                            </div>
+                          }
+                        </div>
+                      </div>
+                    </li>
+                  }
+                </ul>
+              }
+              <p class="text-muted small mb-0">Incidents are reported by technicians on site.</p>
+            </div>
+          }
+        </div>
+
+        @if (keyTimestamps.length) {
+          <hr class="my-4" />
+          <div class="jc-accordion">
+            <button type="button" class="jc-accordion-header" (click)="accTimestampsOpen = !accTimestampsOpen" [attr.aria-expanded]="accTimestampsOpen">
+              <span class="jc-accordion-chevron">{{ accTimestampsOpen ? '▼' : '▶' }}</span>
+              <span class="jc-accordion-title text-muted">Key timestamps</span>
+              <span class="badge bg-light text-dark ms-2">{{ keyTimestamps.length }}</span>
+            </button>
+            @if (accTimestampsOpen) {
+              <div class="jc-accordion-body">
+                <ul class="list-group list-group-flush">
+                  @for (t of keyTimestamps; track $index) {
+                    <li class="list-group-item px-0 d-flex justify-content-between align-items-center">
+                      <span>{{ t.label }}</span>
+                      <span class="text-muted small">{{ t.value | date:'short' }}</span>
+                    </li>
+                  }
+                </ul>
+              </div>
+            }
+          </div>
+        }
+      </div>
+    </div>
+
+    <!-- Draft: Complete setup -->
+    @if (!isClientUser && !isPaidAndLocked && (job.status || '').toLowerCase() === 'draft') {
+      <div class="card border-primary mb-4">
+        <div class="card-body">
+          <h5 class="card-title">Complete setup</h5>
+          <p class="text-muted small mb-3">Finalize setup to move this draft into the active pipeline.</p>
+          <div class="d-flex align-items-center gap-2">
+            @if (completeSetupError) {
+              <span class="text-danger small">{{ completeSetupError }}</span>
+            }
+            <button type="button" class="btn btn-primary btn-sm" (click)="completeSetup()" [disabled]="completingSetup">{{ completingSetup ? 'Completing…' : 'Complete setup' }}</button>
+          </div>
+        </div>
+      </div>
+    }
+
+    <!-- Action-first: What to do now -->
+    @if (!isClientUser && !isPaidAndLocked && (job.status || '').toLowerCase() !== 'draft' && nextAction) {
+      <div class="card border-0 shadow-sm mb-4 next-action-card">
+        <div class="card-body">
+          <h6 class="text-muted text-uppercase small mb-2">Your next step</h6>
+          @if (nextAction.isButton && nextAction.action) {
+            <button type="button" class="btn btn-success btn-lg" (click)="nextAction.action!()" [disabled]="updatingStatus">
+              {{ nextAction.label }}
+            </button>
+          } @else if (nextAction.link) {
+            <a [routerLink]="nextAction.link" [queryParams]="nextAction.queryParams || {}" class="btn btn-primary btn-lg">{{ nextAction.label }}</a>
+          } @else {
+            <p class="mb-0 fw-medium">{{ nextAction.label }}</p>
+          }
+        </div>
+      </div>
+    }
+
+    <!-- Status changed via Details dropdown (admin) or technician app -->
+    @if (statusError) {
+      <p class="text-danger mb-2">{{ statusError }}</p>
+    }
+
+    <!-- Insufficient parts — blocks starting the job -->
+    @if (!isClientUser && (job.partsRequired || (job.plannedParts?.length ?? 0) > 0) && plannedPartsInsufficientStock.length > 0) {
+      <div class="alert alert-danger mb-4">
+        <strong>Insufficient stock for planned parts — job cannot be started until resolved:</strong>
+        <ul class="mt-2 mb-0 ps-3">
+          @for (p of plannedPartsInsufficientStock; track p.partId) {
+            <li class="mb-1">
+              <span class="me-2">{{ p.partName }} (need {{ p.quantity }}, have {{ p.stockQuantity }})</span>
+              @if (!isClientUser && !isPaidAndLocked) {
+                @if (canRequestSupplierStockForPlannedPart(p)) {
+                  <button
+                    type="button"
+                    class="btn btn-sm btn-outline-primary"
+                    (click)="openSupplierDraftModal()">
+                    Request stock
+                  </button>
+                } @else {
+                  <span class="badge text-bg-secondary">{{ plannedPartSupplierRequestBlockReason(p) }}</span>
+                }
+              }
+            </li>
+          }
+        </ul>
+        @if (!isClientUser && !isPaidAndLocked) {
+          <div class="mt-2">
+            <button
+              type="button"
+              class="btn btn-sm btn-outline-primary"
+              (click)="openSupplierDraftModal()">
+              Request supplier quote
+            </button>
+            <a
+              class="btn btn-sm btn-outline-secondary ms-2"
+              [routerLink]="['/purchase-orders/new']"
+              [queryParams]="{ jobCardId: job.id, siteId: job.siteId, clientId: job.companyId ?? '', amount: 0, returnTo: jobCardReturnUrl, notes: insufficientStockOrderNotes }">
+              Order stock directly
+            </a>
+          </div>
+        }
+      </div>
+    }
+
+    <!-- Block job modal -->
+    @if (showBlockModal) {
+      <div class="modal d-block" tabindex="-1" role="dialog" style="background: rgba(0,0,0,.5)">
+        <div class="modal-dialog" role="document">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title">Block job</h5>
+              <button type="button" class="btn-close" (click)="showBlockModal = false" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+              <p class="text-muted small">Technicians cannot open this job until the block is cleared. Common reasons: client not on site, missing permits, missing parts.</p>
+              <label for="blockReason" class="form-label">Reason</label>
+              <input type="text" id="blockReason" class="form-control" [(ngModel)]="blockReason" placeholder="e.g. Client not on site" maxlength="500" />
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" (click)="showBlockModal = false">Cancel</button>
+              <button type="button" class="btn btn-warning" (click)="block()" [disabled]="blocking || !(blockReason || '').trim()">Block job</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    }
+    @if (workAuthPreviewHtml) {
+      <div class="modal d-block" tabindex="-1" role="dialog" style="background: rgba(0,0,0,.5)">
+        <div class="modal-dialog modal-xl modal-dialog-scrollable" role="document">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title">{{ workAuthPreviewTitle || 'Work Authorisation' }}</h5>
+              <button type="button" class="btn-close" (click)="closeWorkAuthPreview()" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+              <div [innerHTML]="workAuthPreviewHtml"></div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" (click)="closeWorkAuthPreview()">Close</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    }
+    @if (showSupplierDraftModal) {
+      <div class="modal d-block" tabindex="-1" role="dialog" style="background: rgba(0,0,0,.5)">
+        <div class="modal-dialog modal-xl modal-dialog-scrollable" role="document">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title">Supplier stock request drafts</h5>
+              <button type="button" class="btn-close" (click)="closeSupplierDraftModal()" [disabled]="sendingAllSupplierDrafts" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+              @if (supplierDraftError) {
+                <div class="alert alert-danger py-2">{{ supplierDraftError }}</div>
+              }
+              @if (supplierDraftSuccess) {
+                <div class="alert alert-success py-2">{{ supplierDraftSuccess }}</div>
+              }
+              @if (loadingSupplierDrafts) {
+                <p class="mb-0">Building email drafts...</p>
+              } @else if (supplierDrafts.length === 0) {
+                <p class="mb-0 text-muted">No supplier-linked non-labour planned parts were found for this job.</p>
+              } @else {
+                <div class="accordion" id="supplierDraftAccordion">
+                  @for (d of supplierDrafts; track d.supplierId; let i = $index) {
+                    <div class="accordion-item mb-2">
+                      <h2 class="accordion-header" [attr.id]="'supplierDraftHeading' + i">
+                        <div
+                          class="accordion-button"
+                          [class.collapsed]="!d.open"
+                          role="button"
+                          tabindex="0"
+                          (click)="toggleSupplierDraft(i)">
+                          <span class="flex-grow-1">{{ d.supplierName }} ({{ d.items.length }} item{{ d.items.length === 1 ? '' : 's' }})</span>
+                          <button
+                            type="button"
+                            class="btn btn-primary btn-sm me-2"
+                            (click)="sendSupplierDraft(i); $event.stopPropagation()"
+                            [disabled]="d.sending || sendingAllSupplierDrafts || !d.toEmail.trim() || !d.subject.trim() || !d.body.trim()">
+                            {{ d.sending ? 'Sending…' : 'Send' }}
+                          </button>
+                        </div>
+                      </h2>
+                      @if (d.open) {
+                        <div class="accordion-body">
+                          @if (d.error) {
+                            <div class="alert alert-danger py-2">{{ d.error }}</div>
+                          }
+                          <div class="row g-3 mb-3">
+                            <div class="col-md-8">
+                              <label class="form-label">To</label>
+                              <input type="email" class="form-control" [(ngModel)]="d.toEmail" />
+                            </div>
+                            <div class="col-md-4">
+                              <label class="form-label">Supplier</label>
+                              <input type="text" class="form-control" [value]="d.supplierName" disabled />
+                            </div>
+                          </div>
+                          <div class="mb-3">
+                            <label class="form-label">Subject</label>
+                            <input type="text" class="form-control" [(ngModel)]="d.subject" />
+                          </div>
+                          <div class="mb-3">
+                            <label class="form-label">Email body</label>
+                            <textarea class="form-control" rows="9" [(ngModel)]="d.body"></textarea>
+                          </div>
+                          <div>
+                            <label class="form-label">Items in this email</label>
+                            <ul class="list-group">
+                              @for (it of d.items; track it.partId) {
+                                <li class="list-group-item d-flex justify-content-between align-items-center">
+                                  <span>{{ it.partName }}</span>
+                                  <span class="small text-muted">Req {{ it.requiredQuantity }} · Reorder {{ it.reorderLevel }} · Ask {{ it.requestedQuantity }}</span>
+                                </li>
+                              }
+                            </ul>
+                          </div>
+                        </div>
+                      }
+                    </div>
+                  }
+                </div>
+              }
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-outline-secondary" (click)="closeSupplierDraftModal()" [disabled]="sendingAllSupplierDrafts">Cancel</button>
+              @if (supplierDrafts.length > 1) {
+                <button type="button" class="btn btn-primary" (click)="sendAllSupplierDrafts()" [disabled]="sendingAllSupplierDrafts || anySupplierDraftSending">
+                  {{ sendingAllSupplierDrafts ? 'Sending all…' : 'Send all' }}
+                </button>
+              }
+            </div>
+          </div>
+        </div>
+      </div>
+    }
+  }
+</div>

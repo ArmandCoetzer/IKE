@@ -1,0 +1,6 @@
+@Tradion.Api_HostAddress = http://localhost:5020
+
+GET {{Tradion.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

@@ -1,0 +1,61 @@
+<div class="container-fluid">
+  <app-page-header
+    [title]="'Purchase Order ' + (item?.poNumber ?? '')"
+    [backBehavior]="returnTo ? 'emit' : 'router'"
+    [backLink]="returnTo ? undefined : '/purchase-orders'"
+    (back)="goBack()">
+    @if (item) {
+      <a class="btn btn-outline-secondary btn-sm" [routerLink]="['/purchase-orders', item.id, 'edit']">Edit</a>
+      <button type="button" class="btn btn-outline-primary btn-sm" (click)="downloadPdf()">Download PDF</button>
+      <a [routerLink]="['/job-cards/new']" [queryParams]="{ siteId: item.siteId, quoteId: item.quoteId, poId: item.id }" class="btn btn-outline-secondary btn-sm">Create job card</a>
+      <div class="btn-group btn-group-sm" role="group">
+      </div>
+    }
+  </app-page-header>
+  @if (statusError) {
+    <p class="text-danger mb-2">{{ statusError }}</p>
+  }
+  @if (actionError) {
+    <p class="text-danger mb-2">{{ actionError }}</p>
+  }
+  @if (loading) {
+    <p>Loading...</p>
+  } @else if (error) {
+    <p class="text-danger">{{ error }}</p>
+  } @else if (item) {
+    <div class="card border-0 shadow-sm rounded-3">
+      <div class="card-body p-4">
+        <dl class="row mb-0">
+          <dt class="col-sm-2">Amount</dt>
+          <dd class="col-sm-10">{{ item.currency }} {{ item.amount | number:'1.2-2' }}</dd>
+          @if (item.quoteId) {
+            <dt class="col-sm-2">Quote</dt>
+            <dd class="col-sm-10"><a class="btn btn-sm btn-outline-primary" [routerLink]="['/quotes', item.quoteId]" [queryParams]="returnTo ? { returnTo } : {}">View quote</a></dd>
+          }
+          <dt class="col-sm-2">Client PO #</dt>
+          <dd class="col-sm-10">
+            @if (item.clientPONumber) {
+              {{ item.clientPONumber }}
+            } @else {
+              <span class="text-muted">Internal PO</span> — we created this for the quote.
+            }
+          </dd>
+          @if (item.hasClientPOFile) {
+            <dt class="col-sm-2">Client PO file</dt>
+            <dd class="col-sm-10">
+              <button type="button" class="btn btn-outline-primary btn-sm" (click)="downloadClientPO()">Download client PO</button>
+            </dd>
+          }
+          <dt class="col-sm-2">Client</dt>
+          <dd class="col-sm-10">{{ item.clientName || '—' }}</dd>
+          <dt class="col-sm-2">Site</dt>
+          <dd class="col-sm-10">{{ item.siteName || '—' }}</dd>
+          @if (item.notes) {
+            <dt class="col-sm-2">Notes</dt>
+            <dd class="col-sm-10">{{ item.notes }}</dd>
+          }
+        </dl>
+      </div>
+    </div>
+  }
+</div>

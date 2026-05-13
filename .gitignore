@@ -1,0 +1,80 @@
+# =============================
+# .NET / Backend
+# =============================
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+[Tt]est[Rr]esult*/
+*.vs/
+*.user
+*.userosscache
+*.suo
+*.cache
+*.dll
+*.exe
+*.pdb
+*.nupkg
+project.lock.json
+.DotSettings.user
+coverage*.json
+coverage*.xml
+*.trx
+*.coverage
+
+# =============================
+# Node / Frontend (root-level)
+# =============================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm
+.eslintcache
+
+# Angular
+.angular/
+dist/
+tmp/
+out-tsc/
+
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+
+# =============================
+# IDE and editors
+# =============================
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.history/
+
+# =============================
+# OS and misc
+# =============================
+.DS_Store
+Thumbs.db
+*.log
+*.tmp
+.env
+.env.prod
+.env.local
+.env.*.local
+
+# =============================
+# Secrets and local config
+# =============================
+**/appsettings.Local.json
+.env
+# appsettings.Development.json
+# **/appsettings.*.local.json

@@ -1,0 +1,26 @@
+services:
+  sqlserver:
+    restart: unless-stopped
+    ports: []
+
+  api:
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_ENVIRONMENT: "Production"
+      # Required for auth token signing in non-testing environments (base64, decodes to >= 32 bytes).
+      Jwt__Key: "${JWT_KEY_BASE64}"
+      Jwt__Issuer: "https://dvcpapi.accent-dev.co.za"
+      Jwt__Audience: "https://dvcp.accent-dev.co.za"
+      App__BaseUrl: "https://dvcp.accent-dev.co.za"
+      Cors__Origins__0: "https://dvcp.accent-dev.co.za"
+      Cors__Origins__1: "https://dvcpapi.accent-dev.co.za"
+      ConnectionStrings__DefaultConnection: "Server=sqlserver,1433;Database=Tradion;User Id=${APP_DB_USER:-tradion_app};Password=${APP_DB_PASSWORD};TrustServerCertificate=True;Encrypt=True;MultipleActiveResultSets=true"
+      # Optional but recommended to avoid plaintext secrets in appsettings.json.
+      SmtpSettings__Password: "${SMTP_PASSWORD}"
+    ports:
+      - "127.0.0.1:5020:5020"
+
+  frontend:
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:4300:80"

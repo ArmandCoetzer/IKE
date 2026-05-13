@@ -1,0 +1,105 @@
+<div class="container-fluid">
+  <app-page-header [title]="item?.fullName || (item?.email ?? 'User')" backLink="/users">
+    @if (item && !editMode) {
+      <button type="button" class="btn btn-sm btn-outline-primary" (click)="startEdit()">Edit</button>
+    }
+  </app-page-header>
+  @if (loading) {
+    <p>Loading...</p>
+  } @else if (error && !editMode) {
+    <p class="text-danger">{{ error }}</p>
+  } @else if (item) {
+    @if (editMode) {
+      <div class="card border-0 shadow-sm rounded-3">
+        <div class="card-body p-4">
+          @if (error) {
+            <div class="alert alert-danger">{{ error }}</div>
+          }
+          <form (ngSubmit)="saveEdit()">
+            <div class="row g-3 mb-3">
+              <div class="col-md-6">
+                <label class="form-label">First name</label>
+                <input type="text" class="form-control" [(ngModel)]="editFirstName" name="editFirstName" required />
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">Last name</label>
+                <input type="text" class="form-control" [(ngModel)]="editLastName" name="editLastName" required />
+              </div>
+            </div>
+            <div class="row g-3 mb-3">
+              <div class="col-md-6">
+                <label class="form-label">Phone</label>
+                <input type="text" class="form-control" [(ngModel)]="editPhone" name="editPhone" />
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">Occupation</label>
+                <input type="text" class="form-control" [(ngModel)]="editOccupation" name="editOccupation" />
+              </div>
+            </div>
+            <div class="row g-3 mb-3">
+              <div class="col-md-6">
+                <label class="form-label">Role</label>
+                <select class="form-select" [(ngModel)]="editRole" name="editRole">
+                  @for (r of roles; track r) {
+                    <option [value]="r">{{ r }}</option>
+                  }
+                </select>
+              </div>
+            </div>
+            <div class="row g-3 mb-3">
+              <div class="col-md-6">
+                <div class="form-check">
+                  <input type="checkbox" class="form-check-input" id="editIsActive" [(ngModel)]="editIsActive" name="editIsActive" />
+                  <label class="form-check-label" for="editIsActive">Active</label>
+                </div>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">Change password (optional)</label>
+                <input type="password" class="form-control" [(ngModel)]="editPassword" name="editPassword" placeholder="Leave blank to keep current" />
+              </div>
+            </div>
+            <div class="d-flex gap-2">
+              <button type="submit" class="btn btn-primary" [disabled]="submitting">Save</button>
+              <button type="button" class="btn btn-light border" (click)="cancelEdit()">Cancel</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    } @else {
+      <div class="card border-0 shadow-sm rounded-3">
+        <div class="card-body p-4">
+          <dl class="row mb-0">
+            <dt class="col-sm-2">Email</dt>
+            <dd class="col-sm-10">{{ item.email }}</dd>
+            <dt class="col-sm-2">Name</dt>
+            <dd class="col-sm-10">{{ item.fullName || '—' }}</dd>
+            <dt class="col-sm-2">Phone</dt>
+            <dd class="col-sm-10">{{ item.phone || '—' }}</dd>
+            <dt class="col-sm-2">Occupation</dt>
+            <dd class="col-sm-10">{{ item.occupation || '—' }}</dd>
+            <dt class="col-sm-2">Role</dt>
+            <dd class="col-sm-10">{{ item.role || '—' }}</dd>
+            <dt class="col-sm-2">Company</dt>
+            <dd class="col-sm-10">{{ item.companyName || '—' }}</dd>
+            <dt class="col-sm-2">Status</dt>
+            <dd class="col-sm-10">{{ item.isActive ? 'Active' : 'Inactive' }}</dd>
+            <dt class="col-sm-2">Registration</dt>
+            <dd class="col-sm-10">
+              <div class="d-flex align-items-center gap-2 flex-wrap">
+                <span>{{ item.registrationStatus || '—' }}</span>
+                @if (item.registrationStatus === 'Invited') {
+                  <button type="button" class="btn btn-outline-secondary btn-sm" (click)="reInvite()" [disabled]="reinviting">
+                    Re-invite
+                  </button>
+                }
+              </div>
+              @if (inviteInfo) {
+                <div class="text-success small mt-1">{{ inviteInfo }}</div>
+              }
+            </dd>
+          </dl>
+        </div>
+      </div>
+    }
+  }
+</div>

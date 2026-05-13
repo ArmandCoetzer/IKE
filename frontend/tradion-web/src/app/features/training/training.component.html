@@ -1,0 +1,49 @@
+<div class="container-fluid">
+  <app-page-header title="Training" />
+
+  @if (myBadges.length > 0) {
+    <div class="card border-0 shadow-sm rounded-3 mb-4">
+      <div class="card-body">
+        <h2 class="h6 mb-2">My badges</h2>
+        @if (loadingBadges) {
+          <p class="text-muted small mb-0">Loading...</p>
+        } @else {
+          <div class="d-flex flex-wrap gap-2">
+            @for (b of myBadges; track b.id) {
+              <span class="badge" [class.bg-success]="!isExpiringSoon(b.expiresAt)" [class.bg-warning]="isExpiringSoon(b.expiresAt)" [class.text-dark]="isExpiringSoon(b.expiresAt)">
+                {{ b.badgeName }}
+                <span class="ms-1 small opacity-75">({{ formatExpiry(b.expiresAt) }})</span>
+              </span>
+            }
+          </div>
+        }
+      </div>
+    </div>
+  }
+
+  @if (loading) {
+    <p>Loading...</p>
+  } @else if (error) {
+    <p class="text-danger">{{ error }}</p>
+  } @else if (courses.length === 0) {
+    <p class="text-muted mb-2">No training courses yet.</p>
+    <p class="text-muted small">Go to <a routerLink="/training-setup">Course management</a> to create courses and modules.</p>
+  } @else {
+    <div class="row g-4">
+      @for (c of courses; track c.id) {
+        <div class="col-md-6 col-lg-4">
+          <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+              <h5 class="card-title">{{ c.name }}</h5>
+              @if (c.description) {
+                <p class="card-text text-muted small">{{ c.description }}</p>
+              }
+              <p class="small mb-2">{{ c.moduleCount }} module{{ c.moduleCount === 1 ? '' : 's' }}</p>
+              <a class="btn btn-sm btn-outline-primary" [routerLink]="['/training', 'course', c.id]">View course</a>
+            </div>
+          </div>
+        </div>
+      }
+    </div>
+  }
+</div>

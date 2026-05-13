@@ -1,0 +1,29 @@
+<div class="container-fluid">
+  <app-page-header [title]="course?.name ?? 'Course'" backLink="/training" backLabel="← Back to Training" />
+  @if (loading) {
+    <p>Loading...</p>
+  } @else if (error) {
+    <p class="text-danger">{{ error }}</p>
+  } @else if (course) {
+    @if (course.description) {
+      <p class="text-muted mb-4">{{ course.description }}</p>
+    }
+    <h5 class="mb-3">Modules</h5>
+    <ul class="list-group">
+      @for (m of course.modules; track m.id) {
+        <li class="list-group-item d-flex justify-content-between align-items-center flex-wrap gap-2">
+          <div>
+            <span class="fw-semibold">{{ m.title }}</span>
+            @if (m.hasQuiz) {
+              <span class="badge bg-secondary ms-2">Quiz</span>
+            }
+            @if (m.isCompleted === true) {
+              <span class="badge bg-success ms-2">Done</span>
+            }
+          </div>
+          <a class="btn btn-sm btn-outline-primary" [routerLink]="['/training', 'module', m.id]">Open</a>
+        </li>
+      }
+    </ul>
+  }
+</div>

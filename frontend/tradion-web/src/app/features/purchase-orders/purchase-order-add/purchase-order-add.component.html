@@ -1,0 +1,104 @@
+<div class="container-fluid">
+  <app-page-header
+    title="Add purchase order"
+    [backBehavior]="returnTo ? 'emit' : 'router'"
+    [backLink]="returnTo ? undefined : '/purchase-orders'"
+    (back)="goBack()" />
+  @if (loading) {
+    <p>Loading...</p>
+  } @else {
+    <div class="card border-0 shadow-sm rounded-3">
+      <div class="card-body p-4">
+        @if (error) {
+          <div class="alert alert-danger">{{ error }}</div>
+        }
+        <form (ngSubmit)="save()">
+          <div class="row g-3 mb-3">
+            <div class="col-md-6">
+              <label class="form-label">Client</label>
+              <select class="form-select" [(ngModel)]="clientId" name="clientId" required [disabled]="fromQuote" (ngModelChange)="onClientChange()">
+                <option [ngValue]="null">— Select client —</option>
+                @for (c of clients; track c.id) {
+                  <option [ngValue]="c.id">{{ c.companyName }}</option>
+                }
+              </select>
+              @if (fromQuote) {
+                <span class="form-text">From linked quote</span>
+              }
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Site</label>
+              <select class="form-select" [(ngModel)]="siteId" name="siteId" required [disabled]="fromQuote">
+                <option [ngValue]="null">— Select site —</option>
+                @for (s of sites; track s.id) {
+                  <option [ngValue]="s.id">{{ s.name }}</option>
+                }
+              </select>
+              @if (fromQuote) {
+                <span class="form-text">From linked quote</span>
+              }
+            </div>
+          </div>
+
+          <div class="mb-4">
+            <label class="form-label">Who provides the PO?</label>
+            <div class="mb-2">
+              <div class="form-check">
+                <input type="radio" class="form-check-input" id="poUs" name="poSource" value="us" [(ngModel)]="poSource" />
+                <label class="form-check-label" for="poUs">We create the PO (internal)</label>
+              </div>
+              @if (poSource === 'us') {
+                <p class="small text-muted ms-4 mb-2">Internal purchase order linked to the quote.</p>
+              }
+              <div class="form-check">
+                <input type="radio" class="form-check-input" id="poClient" name="poSource" value="client" [(ngModel)]="poSource" />
+                <label class="form-check-label" for="poClient">Client will send a PO (add their PO number and file below)</label>
+              </div>
+            </div>
+          </div>
+
+          @if (poSource === 'client') {
+            <div class="border rounded p-3 mb-3 bg-light">
+              <div class="mb-2">
+                <label class="form-label small">Client PO number (optional)</label>
+                <input type="text" class="form-control form-control-sm" [(ngModel)]="clientPONumber" name="clientPONumber" placeholder="e.g. PO-2024-001" />
+              </div>
+              <div>
+                <label class="form-label small">Client PO file (optional)</label>
+                <p class="text-muted small mb-1">Upload the client's PO document (PDF, PNG or JPG, max 10 MB).</p>
+                <input type="file" class="form-control form-control-sm" accept=".pdf,.png,.jpg,.jpeg" (change)="onClientPOFileSelected($event)" />
+                @if (clientPOFile) {
+                  <p class="small text-success mt-1 mb-0">{{ clientPOFile.name }} selected</p>
+                }
+              </div>
+            </div>
+          }
+
+          <div class="row g-3 mb-3">
+            <div class="col-md-6">
+              <label class="form-label">Amount</label>
+              <input type="number" class="form-control" [(ngModel)]="amount" name="amount" step="0.01" min="0" required [readonly]="fromQuote" />
+              @if (fromQuote) {
+                <span class="form-text">From linked quote</span>
+              }
+            </div>
+          </div>
+
+          <div class="mb-4">
+            <label class="form-label">Notes (optional)</label>
+            <input type="text" class="form-control" [(ngModel)]="notes" name="notes" />
+          </div>
+
+          <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-primary" [disabled]="submitting">Save</button>
+            @if (returnTo) {
+              <a (click)="goBack()" class="btn btn-light border" role="button">Cancel</a>
+            } @else {
+              <a routerLink="/purchase-orders" class="btn btn-light border">Cancel</a>
+            }
+          </div>
+        </form>
+      </div>
+    </div>
+  }
+</div>

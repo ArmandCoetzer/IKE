@@ -1,0 +1,5 @@
+{
+  "SmtpSettings": {
+    "Password": "paste-your-smtp-password-here"
+  }
+}
