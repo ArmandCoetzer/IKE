@@ -4,23 +4,22 @@ import 'screens/login_screen.dart';
 import 'screens/job_list_screen.dart';
 import 'services/auth_service.dart';
 
-/// Tradion technician app theme: DVCP colors
-/// Yellow #FDCB00, Charcoal #2C2E33, White, Black
+/// Ian Kleyn Electrical technician app — IKE palette (red, black, white).
 class AppColors {
-  static const Color yellow = Color(0xFFFDCB00);
-  static const Color charcoal = Color(0xFF2C2E33);
+  static const Color brandRed = Color(0xFFE31837);
+  static const Color charcoal = Color(0xFF0A0A0A);
   static const Color white = Color(0xFFFFFFFF);
   static const Color black = Color(0xFF000000);
 }
 
-class TradionTechnicianApp extends StatefulWidget {
-  const TradionTechnicianApp({super.key});
+class IkeTechnicianApp extends StatefulWidget {
+  const IkeTechnicianApp({super.key});
 
   @override
-  State<TradionTechnicianApp> createState() => _TradionTechnicianAppState();
+  State<IkeTechnicianApp> createState() => _IkeTechnicianAppState();
 }
 
-class _TradionTechnicianAppState extends State<TradionTechnicianApp>
+class _IkeTechnicianAppState extends State<IkeTechnicianApp>
     with WidgetsBindingObserver {
   final _auth = AuthService();
   final _navigatorKey = GlobalKey<NavigatorState>();
@@ -113,16 +112,16 @@ class _TradionTechnicianAppState extends State<TradionTechnicianApp>
   Widget build(BuildContext context) {
     return MaterialApp(
       navigatorKey: _navigatorKey,
-      title: 'Tradion Technician',
+      title: 'IKE Technician',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
-          seedColor: AppColors.yellow,
+          seedColor: AppColors.brandRed,
           primary: AppColors.charcoal,
-          secondary: AppColors.yellow,
+          secondary: AppColors.brandRed,
           surface: AppColors.white,
           onPrimary: AppColors.white,
-          onSecondary: AppColors.charcoal,
+          onSecondary: AppColors.white,
           onSurface: AppColors.charcoal,
         ),
         useMaterial3: true,
@@ -133,20 +132,20 @@ class _TradionTechnicianAppState extends State<TradionTechnicianApp>
         ),
         elevatedButtonTheme: ElevatedButtonThemeData(
           style: ElevatedButton.styleFrom(
-            backgroundColor: AppColors.yellow,
-            foregroundColor: AppColors.charcoal,
+            backgroundColor: AppColors.brandRed,
+            foregroundColor: AppColors.white,
           ),
         ),
         filledButtonTheme: FilledButtonThemeData(
           style: FilledButton.styleFrom(
-            backgroundColor: AppColors.yellow,
-            foregroundColor: AppColors.charcoal,
+            backgroundColor: AppColors.brandRed,
+            foregroundColor: AppColors.white,
           ),
         ),
         outlinedButtonTheme: OutlinedButtonThemeData(
           style: OutlinedButton.styleFrom(
             foregroundColor: AppColors.charcoal,
-            side: const BorderSide(color: AppColors.yellow),
+            side: const BorderSide(color: AppColors.brandRed),
           ),
         ),
       ),

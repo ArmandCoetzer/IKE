@@ -1,0 +1,19 @@
+@if (totalCount > 0) {
+  <nav
+    class="ike-table-pagination mt-2 d-flex justify-content-between align-items-center flex-wrap gap-2"
+    [attr.aria-label]="'Pagination, ' + totalCount + ' items'">
+    <span class="text-muted small">
+      @if (showPager) {
+        Showing {{ startItem }}–{{ endItem }} of {{ totalCount }} · Page {{ page }} of {{ totalPages }}
+      } @else {
+        {{ totalCount }} {{ totalCount === 1 ? 'item' : 'items' }}
+      }
+    </span>
+    @if (showPager) {
+      <div class="btn-group btn-group-sm">
+        <button type="button" class="btn btn-outline-secondary" [disabled]="page <= 1" (click)="prev()">Previous</button>
+        <button type="button" class="btn btn-outline-secondary" [disabled]="page >= totalPages" (click)="next()">Next</button>
+      </div>
+    }
+  </nav>
+}

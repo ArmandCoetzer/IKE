@@ -1,4 +1,4 @@
-# Tradion: User process flows (Quote → PO → Job card → Invoice → Payment)
+# IKE: User process flows (Quote → PO → Job card → Invoice → Payment)
 
 This document describes three ways to run a process from start to **invoice and payment**, including when to add a client and how the client’s PO is handled.
 
@@ -24,7 +24,7 @@ This document describes three ways to run a process from start to **invoice and 
 
 ### 3. Record the client’s PO and create your PO
 
-9. Open the same quote again. Click **Create PO** (this creates a purchase order in Tradion linked to the quote, with client, site, and amount pre-filled).
+9. Open the same quote again. Click **Create PO** (this creates a purchase order in the IKE app linked to the quote, with client, site, and amount pre-filled).
 10. You are taken to **Add purchase order**. Confirm Client, Site, Amount (and optional Client PO number). Save.
 11. Go to **Finance** → **Purchase orders**, open that PO, then click **Edit**.
 12. Enter the **Client PO number** (if you have it) and upload the **Client PO file** (PDF/image) if the client sent a document. Save.
@@ -47,7 +47,7 @@ This document describes three ways to run a process from start to **invoice and 
 
 ## Scenario 2: Client sends a request first — then you quote; client sends the PO
 
-**When to use:** The client requests work first (e.g. by email/phone). You add their request in Tradion, then quote; they accept and send a PO. You record their PO.
+**When to use:** The client requests work first (e.g. by email/phone). You add their request in the IKE app, then quote; they accept and send a PO. You record their PO.
 
 ### 1. Add the client (and site) first
 
@@ -92,7 +92,7 @@ This document describes three ways to run a process from start to **invoice and 
 
 ## Scenario 3: You send a quote first — you create the PO (client does not send a PO)
 
-**When to use:** You quote first; the client accepts but does **not** send a PO. You create the PO yourself in Tradion.
+**When to use:** You quote first; the client accepts but does **not** send a PO. You create the PO yourself in the IKE app.
 
 ### 1. Add the client (and site) first
 

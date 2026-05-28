@@ -1,4 +1,4 @@
-# DVCP/Tradion Implementation Checklist
+# IKE Implementation Checklist
 
 **Recommended commit order.** Each item is a logical, reviewable unit.
 
@@ -19,7 +19,7 @@
 - **U-06** – PPE and site photos removed from document dropdown
 - **U-08** – Quote: hide Create PO when quote has linked PO
 - **U-09** – PO status removed (filter, column, buttons)
-- **U-11** – DVCP colors (Yellow #FDCB00, Charcoal #2C2E33) and sidebar/topbar
+- **U-11** – IKE colors (red #E31837, charcoal #0A0A0A) and sidebar/topbar
 - **UX-01** – returnTo on job card back, quote View PO
 - **UX-03** – HTTP error interceptor
 
@@ -180,14 +180,14 @@
 
 ## Phase 8: Branding / Theme
 
-### Commit 8.1: DVCP colors + logo
+### Commit 8.1: IKE colors + logo
 - [ ] Apply Yellow #FDCB00, Charcoal #2C2E33 to web
 - [ ] Add logo to header/sidebar
 - [ ] **Files:** `styles.scss`, `main-layout`, theme config
-- **PR note:** DVCP branding applied.
+- **PR note:** IKE branding applied.
 
-### Commit 8.2: DVCP colors + logo (Flutter)
-- [ ] Ensure technician app uses DVCP colors (already partially done)
+### Commit 8.2: IKE colors + logo (Flutter)
+- [ ] Ensure technician app uses IKE colors
 - [ ] Add logo to app
 - [ ] **Files:** `app.dart`, assets
 - **PR note:** Mobile app branded.

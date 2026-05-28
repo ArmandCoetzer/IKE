@@ -8,13 +8,14 @@ import 'package:flutter/foundation.dart' show kIsWeb, kDebugMode, kProfileMode;
 /// itself, not your PC — you get "Connection refused".
 ///
 /// - **Android emulator:** debug default is `http://10.0.2.2:5020/api` (cleartext allowed in debug only).
-/// - **Release / profile builds:** use HTTPS — set
-///   `--dart-define=API_URL=https://your-host/api` (required for production; Android blocks cleartext in release).
+/// - **Release builds:** default to the hosted IKE API; set
+///   `--dart-define=API_URL=https://your-host/api` only when deploying elsewhere.
 /// - **Physical Android (USB):** debug: `adb reverse tcp:5020 tcp:5020` and HTTP to `127.0.0.1` as above.
 /// - **Physical device (Wi‑Fi):** prefer HTTPS to your API host; for local HTTP during dev use a debug build.
 ///
 /// Guards against empty/malformed `--dart-define` values.
 const String _apiUrlFromDefine = String.fromEnvironment('API_URL', defaultValue: '');
+const String _productionApiBaseUrl = 'https://ikeapi.accent-dev.co.za/api';
 final String apiBaseUrl = _resolveApiBaseUrl();
 
 String _resolveApiBaseUrl() {
@@ -38,16 +39,8 @@ String _resolveApiBaseUrl() {
     }
     return 'http://localhost:5020/api';
   }
-  // Release: no implicit cleartext — default to HTTPS (set API_URL for your deployment).
-  if (kIsWeb) {
-    return 'https://localhost:5020/api';
-  }
-  try {
-    if (Platform.isAndroid) {
-      return 'https://10.0.2.2:5020/api';
-    }
-  } catch (_) {}
-  return 'https://localhost:5020/api';
+  // Release: no implicit cleartext. Default to the hosted API unless a build sets API_URL.
+  return _productionApiBaseUrl;
 }
 
 String get authUrl => '$apiBaseUrl/auth';

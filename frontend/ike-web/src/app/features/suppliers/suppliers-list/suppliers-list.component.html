@@ -1,0 +1,50 @@
+<div class="container-fluid">
+  <app-page-header title="Suppliers">
+    @if (auth.hasPermission('ManagePurchaseOrders')) {
+      <a class="btn btn-primary btn-sm" routerLink="/suppliers/new">Add supplier</a>
+    }
+  </app-page-header>
+
+  @if (error) {
+    <div class="alert alert-danger">{{ error }}</div>
+  }
+
+  <div class="card border-0 shadow-sm rounded-3">
+    <div class="card-body p-4">
+      @if (loading) {
+        <p class="mb-0">Loading...</p>
+      } @else if (suppliers.length === 0) {
+        <p class="text-muted mb-0">No suppliers yet.</p>
+      } @else {
+        <div class="ike-data-table">
+          <table class="table table-sm mb-0">
+            <thead><tr><th>Name</th><th>Email</th><th>Website</th><th>Phone</th><th>Contact</th><th></th></tr></thead>
+            <tbody>
+              @for (s of suppliers | slice:(page - 1) * pageSize : page * pageSize; track s.id) {
+                <tr>
+                  <td>{{ s.name }}</td>
+                  <td>{{ s.email || '—' }}</td>
+                  <td>
+                    @if (s.websiteUrl) {
+                      <a [href]="s.websiteUrl" target="_blank" rel="noopener">{{ s.websiteUrl }}</a>
+                    } @else {
+                      —
+                    }
+                  </td>
+                  <td>{{ s.phone || '—' }}</td>
+                  <td>{{ s.contactPerson || '—' }}</td>
+                  <td>
+                    @if (auth.hasPermission('ManagePurchaseOrders')) {
+                      <a class="btn btn-sm btn-outline-primary" [routerLink]="['/suppliers', s.id, 'edit']">Edit</a>
+                    }
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+        <app-table-pagination [totalCount]="suppliers.length" [page]="page" [pageSize]="pageSize" (pageChange)="page = $event" />
+      }
+    </div>
+  </div>
+</div>

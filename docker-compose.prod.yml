@@ -9,14 +9,32 @@ services:
       ASPNETCORE_ENVIRONMENT: "Production"
       # Required for auth token signing in non-testing environments (base64, decodes to >= 32 bytes).
       Jwt__Key: "${JWT_KEY_BASE64}"
-      Jwt__Issuer: "https://dvcpapi.accent-dev.co.za"
-      Jwt__Audience: "https://dvcp.accent-dev.co.za"
-      App__BaseUrl: "https://dvcp.accent-dev.co.za"
-      Cors__Origins__0: "https://dvcp.accent-dev.co.za"
-      Cors__Origins__1: "https://dvcpapi.accent-dev.co.za"
-      ConnectionStrings__DefaultConnection: "Server=sqlserver,1433;Database=Tradion;User Id=${APP_DB_USER:-tradion_app};Password=${APP_DB_PASSWORD};TrustServerCertificate=True;Encrypt=True;MultipleActiveResultSets=true"
-      # Optional but recommended to avoid plaintext secrets in appsettings.json.
+      # Must match the public browser-facing app/API domains.
+      Jwt__Issuer: "https://ikeapi.accent-dev.co.za"
+      Jwt__Audience: "https://ike.accent-dev.co.za"
+      App__BaseUrl: "https://ike.accent-dev.co.za"
+      Cors__Origins__0: "https://ike.accent-dev.co.za"
+      Cors__Origins__1: "https://ikeapi.accent-dev.co.za"
+      ConnectionStrings__DefaultConnection: "Server=sqlserver,1433;Database=Ike;User Id=${APP_DB_USER:-ike_app};Password=${APP_DB_PASSWORD};TrustServerCertificate=True;Encrypt=True;MultipleActiveResultSets=true"
+      # Email provider: Smtp (default) or MicrosoftGraph.
+      EmailSettings__Provider: "${EMAIL_PROVIDER:-Smtp}"
+      # Optional but recommended to avoid plaintext secrets in appsettings.json when using SMTP.
       SmtpSettings__Password: "${SMTP_PASSWORD}"
+      # Required only when EMAIL_PROVIDER=MicrosoftGraph.
+      MicrosoftGraphEmailSettings__TenantId: "${MICROSOFT_GRAPH_TENANT_ID:-}"
+      MicrosoftGraphEmailSettings__ClientId: "${MICROSOFT_GRAPH_CLIENT_ID:-}"
+      MicrosoftGraphEmailSettings__ClientSecret: "${MICROSOFT_GRAPH_CLIENT_SECRET:-}"
+      MicrosoftGraphEmailSettings__FromEmail: "${MICROSOFT_GRAPH_FROM_EMAIL:-admin@ikegroup.co.za}"
+      MicrosoftGraphEmailSettings__FromName: "${MICROSOFT_GRAPH_FROM_NAME:-IKE}"
+      # Production email must go to the real recipient, not the development catch-all inbox.
+      DebugSettings__IsDevelopmentMode: "false"
+      # Required on first production bootstrap so a known dev password is never used in prod.
+      DefaultAdmin__CompanyName: "${DEFAULT_ADMIN_COMPANY_NAME:-Ian Kleyn Electrical}"
+      DefaultAdmin__Email: "${DEFAULT_ADMIN_EMAIL}"
+      DefaultAdmin__Password: "${DEFAULT_ADMIN_PASSWORD}"
+      DefaultAdmin__FullName: "${DEFAULT_ADMIN_FULL_NAME:-Default Admin}"
+      DefaultAdmin__CompanyPhone: "${DEFAULT_ADMIN_COMPANY_PHONE:-+27 71 347 6880}"
+      DefaultAdmin__CompanyAddress: "${DEFAULT_ADMIN_COMPANY_ADDRESS:-Plot 44, La Marsaillaise Road, St.Albans, Gqeberha}"
     ports:
       - "127.0.0.1:5020:5020"
 

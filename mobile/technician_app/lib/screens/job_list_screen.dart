@@ -163,7 +163,7 @@ class _JobListScreenState extends State<JobListScreen> {
       appBar: AppBar(
         leading: Padding(
           padding: const EdgeInsets.all(8),
-          child: Image.asset('assets/logo/tradion-icon.png', fit: BoxFit.contain),
+          child: Image.asset('assets/logo/ike-icon.png', fit: BoxFit.contain),
         ),
         title: const Text('My jobs'),
         actions: [

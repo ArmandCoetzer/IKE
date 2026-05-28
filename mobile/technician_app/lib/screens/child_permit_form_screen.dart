@@ -4,7 +4,7 @@ import 'package:flutter/services.dart';
 import '../models/job_card.dart';
 import '../services/job_permits_service.dart';
 
-/// Structured fields + DVCP commitment checklists for child (non–Work Authorisation) permits.
+/// Structured fields + commitment checklists for child (non–Work Authorisation) permits.
 class ChildPermitFormScreen extends StatefulWidget {
   final JobPermitDto permit;
 

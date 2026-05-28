@@ -1,0 +1,50 @@
+<div class="container-fluid">
+  <app-page-header title="Audit Error Trail">
+    <button type="button" class="btn btn-outline-secondary btn-sm" (click)="load()" [disabled]="loading">Refresh</button>
+  </app-page-header>
+
+  @if (loading) {
+    <p>Loading...</p>
+  } @else if (error) {
+    <div class="alert alert-danger">{{ error }}</div>
+  } @else {
+    <div class="card border-0 shadow-sm rounded-3">
+      <div class="card-body p-0">
+        <div class="ike-data-table">
+          <div class="table-responsive">
+            <table class="table table-sm align-middle mb-0">
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Status</th>
+                <th>Method</th>
+                <th>Path</th>
+                <th>Message</th>
+                <th>User</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (r of rows | slice:(page - 1) * pageSize : page * pageSize; track r.id) {
+                <tr>
+                  <td>{{ r.createdAt | date:'short' }}</td>
+                  <td><span class="badge" [class.bg-danger]="r.statusCode >= 500" [class.bg-warning]="r.statusCode >= 400 && r.statusCode < 500" [class.text-dark]="r.statusCode >= 400 && r.statusCode < 500">{{ r.statusCode }}</span></td>
+                  <td>{{ r.method }}</td>
+                  <td class="small">{{ r.path }}</td>
+                  <td class="small">{{ r.message }}</td>
+                  <td class="small">{{ r.userId || '—' }}</td>
+                </tr>
+                @if (r.details) {
+                  <tr>
+                    <td colspan="6" class="small text-muted" style="white-space: pre-wrap;">{{ r.details }}</td>
+                  </tr>
+                }
+              }
+            </tbody>
+          </table>
+          </div>
+        </div>
+        <app-table-pagination [totalCount]="rows.length" [page]="page" [pageSize]="pageSize" (pageChange)="page = $event" />
+      </div>
+    </div>
+  }
+</div>

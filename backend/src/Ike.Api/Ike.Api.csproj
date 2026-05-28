@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <InternalsVisibleTo>Ike.Api.Tests</InternalsVisibleTo>
+    <!-- The API reads wwwroot assets directly for PDFs/emails; it does not expose them through ASP.NET static web assets. -->
+    <StaticWebAssetsEnabled>false</StaticWebAssetsEnabled>
+    <!-- Avoid SDK static web asset compression cache collisions on Windows path casing. -->
+    <DisableBuildCompression>true</DisableBuildCompression>
+    <!-- Enables: dotnet user-secrets set "SmtpSettings:Password" "your-password" (from this project directory) -->
+    <UserSecretsId>Ike-Api-7c3e9b2a-4f1d-4a8e-9c6b-2d8e1f0a3b5c</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="9.0.5" />
+    <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="9.0.5" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="9.0.5" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.5">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="9.0.5" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="9.0.5" />
+    <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.15.0" />
+    <PackageReference Include="Microsoft.IdentityModel.Tokens" Version="8.15.0" />
+    <PackageReference Include="QuestPDF" Version="2024.3.0" />
+    <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.15.0" />
+  </ItemGroup>
+
+</Project>

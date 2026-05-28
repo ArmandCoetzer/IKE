@@ -1,0 +1,243 @@
+/* You can add global styles to this file, and also import other style files */
+@use 'bootstrap/scss/bootstrap';
+@import 'leaflet/dist/leaflet.css';
+
+/* Ian Kleyn Electrical / IKE — red, black, white (see https://ikegroup.co.za/) */
+:root {
+  --ike-red: #e31837;
+  --ike-charcoal: #0f0f0f;
+  --ike-accent: #e31837;
+  --ike-accent-light: rgba(227, 24, 55, 0.12);
+  --ike-card-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  --ike-card-shadow-hover: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --ike-btn-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --ike-focus-ring: 0 0 0 2px rgba(227, 24, 55, 0.35);
+}
+
+/* Cards: subtle depth */
+.card {
+  box-shadow: var(--ike-card-shadow);
+  transition: box-shadow 0.2s ease;
+}
+.card:hover {
+  box-shadow: var(--ike-card-shadow-hover);
+}
+
+/* Primary buttons: slight depth + focus */
+.btn-primary {
+  box-shadow: var(--ike-btn-shadow);
+}
+.btn-primary:hover {
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+.btn-primary:focus-visible,
+.btn:focus-visible,
+.form-control:focus-visible,
+.form-select:focus-visible {
+  outline: none;
+  box-shadow: var(--ike-focus-ring);
+}
+
+/* Secondary / outline buttons: focus */
+.btn-outline-primary:focus-visible,
+.btn-outline-secondary:focus-visible,
+a.btn:focus-visible {
+  outline: none;
+  box-shadow: var(--ike-focus-ring);
+}
+
+/* Success / accent use (optional) */
+.text-ike-accent { color: var(--ike-accent); }
+.bg-ike-accent-light { background-color: var(--ike-accent-light); }
+.border-ike-accent { border-color: var(--ike-accent); }
+
+/* Shared table component - global so styles apply to projected content */
+.app-table-wrapper {
+  border-radius: 8px;
+  overflow: hidden;
+  background: #fff;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.06);
+  border: 1px solid #e5e7eb;
+}
+
+.app-table {
+  width: 100%;
+  margin-bottom: 0;
+  border-collapse: collapse;
+  font-size: 0.9375rem;
+
+  thead tr {
+    background: #f9fafb;
+    border-bottom: 1px solid #e5e7eb;
+  }
+  thead th {
+    padding: 1rem 1.25rem;
+    font-weight: 600;
+    color: #374151;
+    font-size: 0.8125rem;
+    text-align: left;
+    white-space: nowrap;
+    border: none;
+  }
+
+  tbody tr {
+    transition: background-color 0.12s ease;
+  }
+  tbody tr:hover {
+    background: #f9fafb !important;
+  }
+  tbody td {
+    padding: 1rem 1.25rem;
+    vertical-align: middle;
+    color: #374151;
+    border: none;
+    border-bottom: 1px solid #e5e7eb;
+  }
+  tbody tr:last-child td {
+    border-bottom: none;
+  }
+  tbody a:not(.btn) {
+    color: var(--ike-charcoal, #2C2E33);
+    text-decoration: none;
+    font-weight: 500;
+  }
+  tbody a:not(.btn):hover {
+    text-decoration: underline;
+    color: var(--ike-accent, #e31837);
+  }
+
+  &.app-table--striped tbody tr:nth-of-type(even) {
+    background: #f9fafb;
+  }
+  &.app-table--striped tbody tr:nth-of-type(even):hover {
+    background: #f3f4f6 !important;
+  }
+
+  &.app-table--compact thead th {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.75rem;
+  }
+  &.app-table--compact tbody td {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.875rem;
+  }
+}
+
+/* --- Shared layout: page header, list toolbars, inline data tables --- */
+.ike-page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+.ike-page-header__main {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  min-width: 0;
+}
+.ike-page-header__title {
+  font-size: 1.5rem;
+  line-height: 1.25;
+  color: var(--ike-charcoal, #0f0f0f);
+}
+.ike-page-header__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.ike-list-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.ike-filter-search {
+  width: 100%;
+  max-width: 220px;
+  min-width: 140px;
+}
+
+.ike-filter-select {
+  width: auto;
+  min-width: 8rem;
+}
+
+/* Inline editors in tables (quotes, invoices, start-new-job) */
+.ike-line-qty-input {
+  max-width: 5.5rem;
+}
+.ike-line-price-input {
+  max-width: 7rem;
+}
+.ike-input-date {
+  max-width: 9.5rem;
+  min-width: 8rem;
+}
+.ike-select-fixed-md {
+  min-width: 10rem;
+  max-width: 12rem;
+}
+
+/* Native Bootstrap tables in cards — closer to app-table wrapper */
+.ike-data-table {
+  border-radius: 8px;
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  box-shadow: var(--ike-card-shadow);
+}
+.ike-data-table > .table {
+  margin-bottom: 0;
+}
+.ike-data-table .table-responsive {
+  margin-bottom: 0;
+}
+.ike-data-table thead,
+.ike-data-table thead th {
+  background: #f9fafb;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #374151;
+}
+.ike-data-table tbody td {
+  vertical-align: middle;
+}
+
+.password-visibility-toggle {
+  position: absolute;
+  top: 50%;
+  right: 0.5rem;
+  transform: translateY(-50%);
+  border: none;
+  background: transparent;
+  color: #6c757d;
+  padding: 0.125rem;
+  line-height: 1;
+  z-index: 3;
+}
+
+.password-visibility-toggle:hover {
+  color: #495057;
+}
+
+.password-visibility-toggle:focus-visible {
+  outline: none;
+  box-shadow: var(--ike-focus-ring);
+  border-radius: 4px;
+}
+
+/* Align Bootstrap primary with IKE red */
+:root {
+  --bs-primary: #e31837;
+  --bs-primary-rgb: 227, 24, 55;
+  --bs-link-color: #e31837;
+  --bs-link-hover-color: #b8142c;
+}

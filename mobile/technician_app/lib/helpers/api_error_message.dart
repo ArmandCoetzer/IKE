@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-/// Parses API error bodies from Tradion.Api (e.g. `{ "message": "..." }`) and common ASP.NET shapes.
+/// Parses API error bodies from the IKE API (e.g. `{ "message": "..." }`) and common ASP.NET shapes.
 String? apiErrorMessageFromBody(String body) {
   final t = body.trim();
   if (t.isEmpty) return null;

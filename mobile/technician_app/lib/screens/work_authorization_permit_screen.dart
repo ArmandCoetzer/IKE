@@ -5,7 +5,7 @@ import 'package:flutter/services.dart';
 import '../services/job_cards_service.dart';
 import '../services/job_permits_service.dart';
 import '../widgets/signature_capture_dialog.dart';
-import '../widgets/tradion_buttons.dart';
+import '../widgets/ike_buttons.dart';
 
 class WorkAuthorizationPermitScreen extends StatefulWidget {
   final String permitId;
@@ -1011,7 +1011,7 @@ class _WorkAuthorizationPermitScreenState extends State<WorkAuthorizationPermitS
                 onStepTapped: (i) => setState(() => _step = i),
                 controlsBuilder: (context, details) => Row(
                   children: [
-                    TradionButtons.primary(
+                    IkeButtons.primary(
                       onPressed: details.onStepContinue,
                       child: Text(_step == 11 ? 'Save' : 'Next'),
                     ),

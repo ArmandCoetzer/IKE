@@ -1,0 +1,45 @@
+<div class="container-fluid">
+  <app-page-header
+    title="Add supplier"
+    [backBehavior]="returnTo ? 'emit' : 'router'"
+    [backLink]="returnTo ? undefined : '/suppliers'"
+    (back)="goBack()"></app-page-header>
+
+  <div class="card border-0 shadow-sm rounded-3">
+    <div class="card-body p-4">
+      @if (error) {
+        <div class="alert alert-danger">{{ error }}</div>
+      }
+
+      <div class="row g-3">
+        <div class="col-md-6">
+          <label class="form-label">Name</label>
+          <input class="form-control" [(ngModel)]="name" name="name" />
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Email (required for stock requests)</label>
+          <input class="form-control" [(ngModel)]="email" name="email" />
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Contact person</label>
+          <input class="form-control" [(ngModel)]="contactPerson" name="contactPerson" />
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Phone</label>
+          <input class="form-control" [(ngModel)]="phone" name="phone" />
+        </div>
+        <div class="col-md-12">
+          <label class="form-label">Website URL</label>
+          <input class="form-control" [(ngModel)]="websiteUrl" name="websiteUrl" />
+        </div>
+      </div>
+
+      <div class="mt-4 d-flex gap-2">
+        <button class="btn btn-primary" (click)="save()" [disabled]="saving || !name.trim() || !email.trim()">
+          {{ saving ? 'Saving…' : 'Save' }}
+        </button>
+        <button type="button" class="btn btn-light border" (click)="goBack()">Cancel</button>
+      </div>
+    </div>
+  </div>
+</div>

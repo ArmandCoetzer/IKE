@@ -1,6 +1,6 @@
 # Flow Gap Analysis & Strategy Plan
 
-This document compares the described DVCP system flow with the existing Tradion codebase and outlines what needs to be added, fixed, or changed.
+This document compares the described IKE field-service system flow with the existing codebase and outlines what needs to be added, fixed, or changed.
 
 ---
 

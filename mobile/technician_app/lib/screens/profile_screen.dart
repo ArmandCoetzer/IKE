@@ -11,7 +11,6 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   final _auth = AuthService();
-  ProfileDto? _profile;
   bool _loading = true;
   String? _error;
 
@@ -56,7 +55,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       final p = await _auth.getProfile();
       if (!mounted) return;
       setState(() {
-        _profile = p;
         _firstNameController.text = p.firstName ?? '';
         _lastNameController.text = p.lastName ?? '';
         _phoneController.text = p.phone ?? '';

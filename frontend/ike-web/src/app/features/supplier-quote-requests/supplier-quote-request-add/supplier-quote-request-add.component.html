@@ -1,0 +1,149 @@
+<div class="container-fluid">
+  <app-page-header title="New supplier quote request">
+    <a [routerLink]="['/suppliers/new']" [queryParams]="{ returnTo: addSupplierReturnTo }" class="btn btn-outline-primary btn-sm">Add supplier</a>
+  </app-page-header>
+  <div class="card border-0 shadow-sm rounded-3">
+    <div class="card-body p-4">
+      @if (success) {
+        <div class="alert alert-success">{{ success }}</div>
+      }
+      @if (error) {
+        <div class="alert alert-danger">{{ error }}</div>
+      }
+      <form (ngSubmit)="save()">
+        <div class="mb-4">
+          <p class="text-muted small mb-3">Select one or more parts. The system will build draft emails for every supplier linked to the selected parts.</p>
+          @if (partRows.length === 0) {
+            <p class="text-warning mb-0">No stock parts are available.</p>
+          } @else {
+            <div class="table-responsive">
+              <table class="table table-sm align-middle">
+                <thead>
+                  <tr>
+                    <th style="width: 3rem;"></th>
+                    <th>Part</th>
+                    <th>Linked suppliers</th>
+                    <th class="text-end">In stock</th>
+                    <th class="text-end">Reorder level</th>
+                    <th style="width: 12rem;">Request quantity</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (row of partRows; track row.part.id) {
+                    <tr>
+                      <td>
+                        <input
+                          type="checkbox"
+                          class="form-check-input"
+                          [checked]="row.selected"
+                          [disabled]="!partHasLinkedSupplier(row.part)"
+                          (change)="onPartChecked(row, $any($event.target).checked)" />
+                      </td>
+                      <td>
+                        <div class="fw-medium">{{ row.part.name }}</div>
+                        @if (row.part.partNumber) {
+                          <div class="small text-muted">{{ row.part.partNumber }}</div>
+                        }
+                      </td>
+                      <td>
+                        {{ supplierNames(row.part) }}
+                        @if (!partHasLinkedSupplier(row.part)) {
+                          <span class="badge text-bg-secondary ms-1">No supplier linked</span>
+                        }
+                      </td>
+                      <td class="text-end">{{ row.part.quantity }}</td>
+                      <td class="text-end">{{ row.part.reorderLevel }}</td>
+                      <td>
+                        <input
+                          type="number"
+                          class="form-control form-control-sm"
+                          [(ngModel)]="row.requestedQuantity"
+                          [name]="'requestedQuantity' + row.part.id"
+                          min="1"
+                          [disabled]="!row.selected" />
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          }
+        </div>
+        <div class="d-flex gap-2">
+          <button type="submit" class="btn btn-primary" [disabled]="submitting || selectedPartRows.length === 0">{{ submitting ? 'Building drafts…' : 'Create request' }}</button>
+          <a routerLink="/supplier-quote-requests" class="btn btn-light border">Cancel</a>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+@if (showDraftModal) {
+  <div class="modal d-block" tabindex="-1" role="dialog" style="background: rgba(0,0,0,.5)">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable" role="document">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Supplier request draft emails</h5>
+          <button type="button" class="btn-close" (click)="cancelDraft()" [disabled]="sendingAllDrafts || anyDraftSending" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          @if (drafts.length === 0) {
+            <p class="text-muted mb-0">No drafts to send.</p>
+          } @else {
+            <div class="accordion" id="supplierQuoteDraftAccordion">
+              @for (draft of drafts; track draft.supplierId; let i = $index) {
+                <div class="accordion-item mb-2">
+                  <h2 class="accordion-header">
+                    <div class="accordion-button" [class.collapsed]="!draft.open" role="button" tabindex="0" (click)="toggleDraft(i)">
+                      <span class="flex-grow-1">{{ draft.supplierName }} ({{ draft.items.length }} item{{ draft.items.length === 1 ? '' : 's' }})</span>
+                      <button
+                        type="button"
+                        class="btn btn-primary btn-sm me-2"
+                        (click)="$event.stopPropagation(); sendDraft(i)"
+                        [disabled]="draft.sending || sendingAllDrafts || !draft.toEmail.trim() || !draft.subject.trim() || !draft.body.trim()">
+                        {{ draft.sending ? 'Sending…' : 'Send' }}
+                      </button>
+                    </div>
+                  </h2>
+                  @if (draft.open) {
+                    <div class="accordion-body">
+                      @if (draft.error) {
+                        <div class="alert alert-danger py-2">{{ draft.error }}</div>
+                      }
+                      <div class="row g-3 mb-3">
+                        <div class="col-md-8">
+                          <label class="form-label">To</label>
+                          <input type="email" class="form-control" [(ngModel)]="draft.toEmail" />
+                        </div>
+                        <div class="col-md-4">
+                          <label class="form-label">Supplier</label>
+                          <input type="text" class="form-control" [value]="draft.supplierName" disabled />
+                        </div>
+                      </div>
+                      <div class="mb-3">
+                        <label class="form-label">Subject</label>
+                        <input type="text" class="form-control" [(ngModel)]="draft.subject" />
+                      </div>
+                      <div class="mb-3">
+                        <label class="form-label">Email body</label>
+                        <textarea class="form-control" rows="9" [(ngModel)]="draft.body"></textarea>
+                      </div>
+                    </div>
+                  }
+                </div>
+              }
+            </div>
+          }
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" (click)="cancelDraft()" [disabled]="sendingAllDrafts || anyDraftSending">Cancel</button>
+          @if (drafts.length > 1) {
+            <button type="button" class="btn btn-primary" (click)="sendAllDrafts()" [disabled]="sendingAllDrafts || anyDraftSending">
+              {{ sendingAllDrafts ? 'Sending all…' : 'Send all' }}
+            </button>
+          }
+        </div>
+      </div>
+    </div>
+  </div>
+}

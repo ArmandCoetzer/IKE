@@ -48,6 +48,8 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _submit() async {
+    if (_loading) return;
+    if (!(_formKey.currentState?.validate() ?? false)) return;
     setState(() {
       _error = null;
       _loading = true;
@@ -93,13 +95,13 @@ class _LoginScreenState extends State<LoginScreen> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Image.asset(
-                        'assets/logo/tradion-full.png',
+                        'assets/logo/ike-full.png',
                         height: 208,
                         fit: BoxFit.contain,
                         errorBuilder: (_, __, ___) => Text(
-                          'Tradion',
+                          'IKE',
                           style: Theme.of(context).textTheme.headlineLarge?.copyWith(
-                                color: AppColors.yellow,
+                                color: AppColors.brandRed,
                                 fontWeight: FontWeight.bold,
                               ),
                         ),

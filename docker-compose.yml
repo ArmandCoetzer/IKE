@@ -1,13 +1,13 @@
 services:
   sqlserver:
     image: mcr.microsoft.com/mssql/server:2022-latest
-    container_name: tradion-sqlserver
+    container_name: ike-sqlserver
     environment:
       ACCEPT_EULA: "Y"
       MSSQL_PID: "Developer"
       SA_PASSWORD: "${SA_PASSWORD}"
     volumes:
-      - tradion_sql_data:/var/opt/mssql
+      - ike_sql_data:/var/opt/mssql
     healthcheck:
       test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P \"$${SA_PASSWORD}\" -Q \"SELECT 1\" || exit 1"]
       interval: 15s
@@ -17,10 +17,10 @@ services:
 
   sql-init:
     image: mcr.microsoft.com/mssql/server:2022-latest
-    container_name: tradion-sql-init
+    container_name: ike-sql-init
     environment:
       SA_PASSWORD: "${SA_PASSWORD}"
-      APP_DB_USER: "${APP_DB_USER:-tradion_app}"
+      APP_DB_USER: "${APP_DB_USER:-ike_app}"
       APP_DB_PASSWORD: "${APP_DB_PASSWORD}"
     depends_on:
       sqlserver:
@@ -28,12 +28,12 @@ services:
     command: >
       /bin/bash -lc "
       /opt/mssql-tools18/bin/sqlcmd -C -S sqlserver -U sa -P \"$$SA_PASSWORD\" -Q \"
-      IF DB_ID(N'Tradion') IS NULL CREATE DATABASE [Tradion];
+      IF DB_ID(N'Ike') IS NULL CREATE DATABASE [Ike];
       IF NOT EXISTS (SELECT 1 FROM sys.server_principals WHERE name = N'$$APP_DB_USER')
         EXEC('CREATE LOGIN [' + REPLACE('$$APP_DB_USER', ']', ']]') + '] WITH PASSWORD = ''$$APP_DB_PASSWORD'', CHECK_POLICY = OFF');
       ELSE
         EXEC('ALTER LOGIN [' + REPLACE('$$APP_DB_USER', ']', ']]') + '] WITH PASSWORD = ''$$APP_DB_PASSWORD''');
-      USE [Tradion];
+      USE [Ike];
       IF NOT EXISTS (SELECT 1 FROM sys.database_principals WHERE name = N'$$APP_DB_USER')
         EXEC('CREATE USER [' + REPLACE('$$APP_DB_USER', ']', ']]') + '] FOR LOGIN [' + REPLACE('$$APP_DB_USER', ']', ']]') + ']');
       EXEC sp_addrolemember N'db_owner', N'$$APP_DB_USER';
@@ -41,27 +41,27 @@ services:
 
   api:
     build:
-      context: ./backend/src/Tradion.Api
+      context: ./backend/src/Ike.Api
       dockerfile: Dockerfile
-    container_name: tradion-api
+    container_name: ike-api
     environment:
       ASPNETCORE_ENVIRONMENT: "Production"
       ASPNETCORE_URLS: "http://+:5020"
-      ConnectionStrings__DefaultConnection: "Server=sqlserver,1433;Database=Tradion;User Id=${APP_DB_USER:-tradion_app};Password=${APP_DB_PASSWORD};TrustServerCertificate=True;Encrypt=False;MultipleActiveResultSets=true"
-      Jwt__Issuer: "Tradion.Api"
-      Jwt__Audience: "Tradion.Web"
+      ConnectionStrings__DefaultConnection: "Server=sqlserver,1433;Database=Ike;User Id=${APP_DB_USER:-ike_app};Password=${APP_DB_PASSWORD};TrustServerCertificate=True;Encrypt=False;MultipleActiveResultSets=true"
+      Jwt__Issuer: "Ike.Api"
+      Jwt__Audience: "Ike.Web"
     depends_on:
       sql-init:
         condition: service_completed_successfully
 
   frontend:
     build:
-      context: ./frontend/tradion-web
+      context: ./frontend/ike-web
       dockerfile: Dockerfile
-    container_name: tradion-frontend
+    container_name: ike-frontend
     depends_on:
       - api
 
 volumes:
-  tradion_sql_data:
-    name: "${SQL_VOLUME_NAME:-tradion_sql_data}"
+  ike_sql_data:
+    name: "${SQL_VOLUME_NAME:-ike_sql_data}"

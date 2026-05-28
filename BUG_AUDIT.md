@@ -1,4 +1,4 @@
-# DVCP/Tradion Bug Audit
+# IKE Bug Audit
 
 **System:** Angular web + .NET API + Flutter technician app  
 **Date:** 2025  
@@ -99,7 +99,7 @@
 
 | ID | Issue | Fix |
 |----|-------|-----|
-| **U-11** | Colors and logo | Apply DVCP color scheme (Yellow #FDCB00, Charcoal #2C2E33) + add logo throughout web + mobile |
+| **U-11** | Colors and logo | Apply IKE color scheme (red #E31837, charcoal #0A0A0A) + add logo throughout web + mobile |
 
 ---
 

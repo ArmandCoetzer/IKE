@@ -5,8 +5,8 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../config/api_config.dart';
 
-const _tokenKey = 'tradion_token';
-const _userKey = 'tradion_user';
+const _tokenKey = 'ike_token';
+const _userKey = 'ike_user';
 const _rememberMeEnabledKey = 'remember_me_enabled';
 const _rememberedEmailKey = 'remembered_email_secure';
 const _rememberedPasswordKey = 'remembered_password_secure';

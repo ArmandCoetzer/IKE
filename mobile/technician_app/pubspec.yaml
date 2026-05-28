@@ -1,5 +1,5 @@
-name: tradion_technician
-description: Tradion Technician mobile app for field workers.
+name: ike_technician
+description: Ian Kleyn Electrical (IKE) technician mobile app for field workers.
 publish_to: 'none'
 version: 1.0.0+1
 
@@ -36,6 +36,6 @@ flutter:
 flutter_launcher_icons:
   android: true
   ios: true
-  image_path: assets/logo/tradion-icon.png
-  adaptive_icon_background: "#2C2E33"
-  adaptive_icon_foreground: assets/logo/tradion-icon.png
+  image_path: assets/logo/ike-icon.png
+  adaptive_icon_background: "#0A0A0A"
+  adaptive_icon_foreground: assets/logo/ike-icon.png

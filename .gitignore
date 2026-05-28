@@ -6,6 +6,7 @@
 [Ll]og/
 [Ll]ogs/
 [Tt]est[Rr]esult*/
+**/[Tt]est[Rr]esult*/
 *.vs/
 *.user
 *.userosscache
@@ -41,8 +42,13 @@ out-tsc/
 # Playwright
 /test-results/
 /playwright-report/
+**/test-results/
+**/playwright-report/
 /blob-report/
 /playwright/.cache/
+**/blob-report/
+**/playwright/.cache/
+*.lscache
 
 # =============================
 # IDE and editors

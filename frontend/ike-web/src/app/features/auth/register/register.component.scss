@@ -1,0 +1,76 @@
+/* Ian Kleyn Electrical / IKE: red accent on charcoal */
+:host {
+  display: block;
+}
+
+.auth-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #2C2E33;
+  color: white !important;
+}
+
+.auth-page .card {
+  border: none;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  background: #3e4047;
+  color: white !important;
+}
+
+.auth-card-body {
+  position: relative;
+  padding: 0.5rem 1rem 1rem;
+  padding-top: 12rem;
+}
+
+.auth-brand-logo {
+  position: absolute;
+  bottom: 72%;
+  left: 50%;
+  transform: translateX(-50%);
+  height: 280px;
+  width: auto;
+  max-width: 100%;
+  display: block;
+  object-fit: contain;
+}
+
+.auth-page .card-title {
+  color: white;
+  font-weight: 600;
+}
+
+.auth-page .btn-primary {
+  background-color: #e31837;
+  border-color: #e31837;
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.auth-page .btn-primary:hover {
+  background-color: #b8142c;
+  border-color: #b8142c;
+  color: #ffffff;
+}
+
+.auth-page .form-label,
+.auth-page h6 {
+  color: white;
+}
+
+.auth-page .form-text,
+.auth-page .text-muted {
+  color: rgba(255, 255, 255, 0.9) !important;
+}
+
+.auth-page a.fw-medium {
+  color: white;
+  text-decoration: underline;
+}
+
+.auth-page a.fw-medium:hover {
+  color: #ff6b7a;
+}

@@ -1,4 +1,4 @@
-# Tradion Permit Workflow Context (Agreed Rules)
+# IKE Permit Workflow Context (Agreed Rules)
 
 This file captures the currently agreed business rules for WA and child permit lifecycle behavior.
 

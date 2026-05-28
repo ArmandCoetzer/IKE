@@ -26,7 +26,7 @@
 - **PartsController:** List (optional `?lowStockOnly=true`), Get, Create, Update, Delete. Policies: `RequireViewPurchaseOrders` / `RequireManagePurchaseOrders`.
 
 ### 5. Frontend – Parts service
-- **`frontend/tradion-web/src/app/core/services/parts.service.ts`** – `list(lowStockOnly?)`, `get`, `create`, `update`, `delete`.
+- **`frontend/ike-web/src/app/core/services/parts.service.ts`** – `list(lowStockOnly?)`, `get`, `create`, `update`, `delete`.
 
 ---
 
@@ -35,7 +35,7 @@
 ### A. Apply Parts migration
 If design-time DbContext is fixed (e.g. Jwt:Key in env or launchSettings):
 ```bash
-cd backend/src/Tradion.Api
+cd backend/src/Ike.Api
 dotnet ef database update
 ```
 If the migration fails because **Suppliers** table is missing, create it first (e.g. ensure the migration that creates Suppliers has been applied).

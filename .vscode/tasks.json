@@ -5,7 +5,7 @@
       "label": "build-api",
       "type": "shell",
       "command": "dotnet build",
-      "args": ["backend/src/Tradion.Api/Tradion.Api.csproj"],
+      "args": ["backend/src/Ike.Api/Ike.Api.csproj"],
       "options": {
         "cwd": "${workspaceFolder}",
         "env": {

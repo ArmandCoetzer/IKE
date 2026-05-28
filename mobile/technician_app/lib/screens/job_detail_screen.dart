@@ -190,9 +190,10 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
     if (_waExpiredStandstill) return false;
     if (!_isJobStarted) return false;
     if (!_allPermitsMarkedDone) return false;
-    final anyExpiredActive = _job!.permits.any((p) {
-      return PermitStatusValue.isActiveLike(p.status) && p.isExpired;
-    });
+    final anyExpiredActive = _job!.permitsRequired &&
+        _job!.permits.any((p) {
+          return PermitStatusValue.isActiveLike(p.status) && p.isExpired;
+        });
     if (anyExpiredActive) return false;
     return _hasBeforePhoto && _hasAfterPhoto;
   }
@@ -202,6 +203,9 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
           d.documentType == _finalClientSignOffDocType &&
           (d.filePath != null && d.filePath!.trim().isNotEmpty)) ??
       false;
+
+  List<JobCardDocumentDto> get _visibleUploadedDocuments =>
+      _job?.documents.where((d) => d.documentType != _finalClientSignOffDocType).toList() ?? [];
 
   String _documentListTitle(JobCardDocumentDto d) {
     if (d.documentType == _finalClientSignOffDocType) return 'Final client sign-off';
@@ -218,13 +222,16 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
       _isJobStarted || _hasBeforePhoto || _hasAfterPhoto || _midPhotos.isNotEmpty;
 
   bool get _hasExpiredPermit =>
-      _job?.permits.any((p) => PermitStatusValue.isActiveLike(p.status) && p.isExpired) ?? false;
+      (_job?.permitsRequired ?? false) &&
+      (_job?.permits.any((p) => PermitStatusValue.isActiveLike(p.status) && p.isExpired) ?? false);
 
   /// When true, block all non-permit actions until permit expiry is resolved.
   bool get _blockedByExpiredPermit => _hasExpiredPermit;
 
-  bool get _waAmendmentBlocksSitePhotos => _job?.pendingWaAmendmentSignOff ?? false;
-  bool get _waExpiredStandstill => _job?.waExpiredStandstill ?? false;
+  bool get _waAmendmentBlocksSitePhotos =>
+      (_job?.permitsRequired ?? false) && (_job?.pendingWaAmendmentSignOff ?? false);
+  bool get _waExpiredStandstill =>
+      (_job?.permitsRequired ?? false) && (_job?.waExpiredStandstill ?? false);
 
   bool get _canStartWork =>
       _job != null && !_waExpiredStandstill && (!_job!.permitsRequired || _workAuthorisationSignedOffForStart);
@@ -447,7 +454,7 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
       setState(() {
         _job = job;
         _documentsAccordionKey++;
-        _documentsAccordionExpanded = job.documents.length <= 3;
+        _documentsAccordionExpanded = _visibleUploadedDocuments.length <= 3;
         _loading = false;
         _jobRefreshing = false;
       });
@@ -460,7 +467,7 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
         setState(() {
           _job = refreshed;
           _documentsAccordionKey++;
-          _documentsAccordionExpanded = refreshed.documents.length <= 3;
+          _documentsAccordionExpanded = _visibleUploadedDocuments.length <= 3;
         });
       }
     } catch (e) {
@@ -1175,7 +1182,7 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                 Navigator.of(context).pop();
               },
             ),
-            Image.asset('assets/logo/tradion-icon.png', width: 24, height: 24, fit: BoxFit.contain),
+            Image.asset('assets/logo/ike-icon.png', width: 24, height: 24, fit: BoxFit.contain),
           ],
         ),
         title: const Text('Job detail'),
@@ -1321,6 +1328,7 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                                 if (_job!.siteAddress != null) _row('Address', _job!.siteAddress!),
                                 _row('Priority', 'P${_job!.priority}'),
                                 if (_job!.dueDate != null) _row('Due', _formatDate(_job!.dueDate!)),
+                                if (_job!.permitsRequired) _row('Permits', 'Required'),
                               ],
                             ),
                             _Section(
@@ -1328,8 +1336,8 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                               children: [
                                 if (_job!.createdAt != null) _row('Job created', _formatDateTime(_job!.createdAt!)),
                                 if (_job!.startedAt != null) _row('Work started', _formatDateTime(_job!.startedAt!)),
-                                if (_job!.firstPermitRequestedAt != null) _row('1st permit requested', _formatDateTime(_job!.firstPermitRequestedAt!)),
-                                if (_job!.firstPermitApprovedAt != null) _row('1st permit approved', _formatDateTime(_job!.firstPermitApprovedAt!)),
+                                if (_job!.permitsRequired && _job!.firstPermitRequestedAt != null) _row('1st permit requested', _formatDateTime(_job!.firstPermitRequestedAt!)),
+                                if (_job!.permitsRequired && _job!.firstPermitApprovedAt != null) _row('1st permit approved', _formatDateTime(_job!.firstPermitApprovedAt!)),
                                 if (_job!.firstSitePhotoAt != null) _row('1st site photo', _formatDateTime(_job!.firstSitePhotoAt!)),
                                 if (_job!.completedAt != null) _row('Job completed', _formatDateTime(_job!.completedAt!)),
                               ],
@@ -1508,8 +1516,8 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                                       icon: const Icon(Icons.play_arrow),
                                       label: const Text('Start job'),
                                       style: FilledButton.styleFrom(
-                                        backgroundColor: AppColors.yellow,
-                                        foregroundColor: AppColors.charcoal,
+                                        backgroundColor: AppColors.brandRed,
+                                        foregroundColor: AppColors.white,
                                       ),
                                     ),
                                     const SizedBox(height: 8),
@@ -1586,8 +1594,8 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                                 icon: const Icon(Icons.play_arrow),
                                 label: const Text('Start job'),
                                 style: FilledButton.styleFrom(
-                                  backgroundColor: AppColors.yellow,
-                                  foregroundColor: AppColors.charcoal,
+                                  backgroundColor: AppColors.brandRed,
+                                  foregroundColor: AppColors.white,
                                 ),
                               ),
                               const SizedBox(height: 8),
@@ -1659,7 +1667,7 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                                 ],
                               ),
                             ],
-                            if (_job!.documents.isNotEmpty) ...[
+                            if (_visibleUploadedDocuments.isNotEmpty) ...[
                               const SizedBox(height: 24),
                               Theme(
                                 data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
@@ -1675,10 +1683,10 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                                         ),
                                   ),
                                   subtitle: Text(
-                                    '${_job!.documents.length} file(s)',
+                                    '${_visibleUploadedDocuments.length} file(s)',
                                     style: TextStyle(fontSize: 13, color: Colors.grey[600]),
                                   ),
-                                  children: _job!.documents
+                                  children: _visibleUploadedDocuments
                                       .map((d) => ListTile(
                                             dense: true,
                                             title: Text(
