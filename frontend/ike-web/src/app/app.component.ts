@@ -1,7 +1,9 @@
 import { Component, OnInit, OnDestroy, HostListener } from '@angular/core';
-import { RouterOutlet } from '@angular/router';
+import { NavigationCancel, NavigationEnd, NavigationError, NavigationStart, Router, RouterOutlet } from '@angular/router';
+import { Subscription } from 'rxjs';
 import { AuthService } from './core/services/auth.service';
 import { ToastContainerComponent } from './core/components/toast-container/toast-container.component';
+import { LoadingIndicatorService } from './core/services/loading-indicator.service';
 
 @Component({
   selector: 'app-root',
@@ -14,10 +16,17 @@ export class AppComponent implements OnInit, OnDestroy {
   private idleTimer: ReturnType<typeof setTimeout> | null = null;
   private hiddenAtMs: number | null = null;
   private readonly visibilityHandler = () => this.handleVisibilityChange();
+  private routerSub: Subscription | null = null;
 
-  constructor(private auth: AuthService) {}
+  constructor(
+    private auth: AuthService,
+    private router: Router,
+    private loadingIndicator: LoadingIndicatorService
+  ) {}
 
   ngOnInit(): void {
+    this.trackRouterLoading();
+
     if (this.auth.getToken() && !this.auth.isTokenExpired()) {
       this.auth.me().subscribe({
         error: () => this.auth.logout()
@@ -37,7 +46,21 @@ export class AppComponent implements OnInit, OnDestroy {
     for (const ev of activityEvents)
       window.removeEventListener(ev, this.onUserActivity);
     document.removeEventListener('visibilitychange', this.visibilityHandler);
+    this.routerSub?.unsubscribe();
     this.clearIdleTimer();
+  }
+
+  private trackRouterLoading(): void {
+    this.routerSub = this.router.events.subscribe(event => {
+      if (event instanceof NavigationStart) {
+        this.loadingIndicator.begin();
+        return;
+      }
+
+      if (event instanceof NavigationEnd || event instanceof NavigationCancel || event instanceof NavigationError) {
+        this.loadingIndicator.end();
+      }
+    });
   }
 
   private readonly onUserActivity = (): void => {
