@@ -9,6 +9,28 @@
     <div class="alert alert-danger">{{ error }}</div>
   }
 
+  @if (auth.hasPermission('ManagePurchaseOrders')) {
+    <div class="d-flex gap-2 align-items-center flex-wrap mb-2">
+      <button type="button" class="btn btn-outline-danger btn-sm" (click)="deleteSelectedSuppliers()" [disabled]="!someSelected || bulkDeleting">
+        {{ bulkDeleting ? 'Deleting...' : 'Delete selected' }}
+      </button>
+      @if (someSelected) {
+        <span class="text-muted small">{{ selectedSupplierIds.size }} selected</span>
+      }
+    </div>
+  }
+  @if (bulkDeleteFailures.length) {
+    <div class="alert alert-warning alert-dismissible">
+      <button type="button" class="btn-close" aria-label="Close" (click)="bulkDeleteFailures = []"></button>
+      <div class="fw-semibold mb-1">Some selected suppliers could not be deleted:</div>
+      <ul class="mb-0">
+        @for (failure of bulkDeleteFailures; track failure) {
+          <li>{{ failure }}</li>
+        }
+      </ul>
+    </div>
+  }
+
   <div class="card border-0 shadow-sm rounded-3">
     <div class="card-body p-4">
       @if (loading) {
@@ -18,10 +40,13 @@
       } @else {
         <div class="ike-data-table">
           <table class="table table-sm mb-0">
-            <thead><tr><th>Name</th><th>Email</th><th>Website</th><th>Phone</th><th>Contact</th><th></th></tr></thead>
+            <thead><tr>@if (auth.hasPermission('ManagePurchaseOrders')) {<th><input type="checkbox" [checked]="allSelected" [indeterminate]="someSelected && !allSelected" (change)="toggleSelectAll($any($event.target).checked)" aria-label="Select all suppliers" /></th>}<th>Name</th><th>Email</th><th>Website</th><th>Phone</th><th>Contact</th><th>Linked parts</th><th></th></tr></thead>
             <tbody>
-              @for (s of suppliers | slice:(page - 1) * pageSize : page * pageSize; track s.id) {
+              @for (s of pagedSuppliers; track s.id) {
                 <tr>
+                  @if (auth.hasPermission('ManagePurchaseOrders')) {
+                    <td><input type="checkbox" [checked]="isSelected(s.id)" (change)="toggleSelect(s.id, $any($event.target).checked)" [attr.aria-label]="'Select supplier ' + s.name" /></td>
+                  }
                   <td>{{ s.name }}</td>
                   <td>{{ s.email || '—' }}</td>
                   <td>
@@ -34,8 +59,33 @@
                   <td>{{ s.phone || '—' }}</td>
                   <td>{{ s.contactPerson || '—' }}</td>
                   <td>
+                    @if (hasLinkedParts(s)) {
+                      {{ s.partIds.length }} part{{ s.partIds.length === 1 ? '' : 's' }}
+                    } @else {
+                      —
+                    }
+                  </td>
+                  <td>
                     @if (auth.hasPermission('ManagePurchaseOrders')) {
+                      @if (hasLinkedParts(s)) {
+                        <a
+                          class="btn btn-sm btn-warning me-1"
+                          [routerLink]="['/supplier-quote-requests/new']"
+                          [queryParams]="{
+                            supplierId: s.id,
+                            returnTo: '/suppliers'
+                          }">
+                          Request stock
+                        </a>
+                      }
                       <a class="btn btn-sm btn-outline-primary" [routerLink]="['/suppliers', s.id, 'edit']">Edit</a>
+                      <button
+                        type="button"
+                        class="btn btn-sm btn-outline-danger"
+                        (click)="deleteSupplier(s)"
+                        [disabled]="deletingSupplierId === s.id">
+                        {{ deletingSupplierId === s.id ? 'Deleting...' : 'Delete' }}
+                      </button>
                     }
                   </td>
                 </tr>

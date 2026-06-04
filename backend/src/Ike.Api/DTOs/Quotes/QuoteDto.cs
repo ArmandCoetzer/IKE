@@ -5,11 +5,13 @@ namespace Ike.Api.DTOs.Quotes;
 public class QuoteLineItemDto
 {
     public string LineType { get; set; } = "Labour";
+    public string? Code { get; set; }
     public string Description { get; set; } = string.Empty;
     public decimal Quantity { get; set; }
     public decimal UnitPrice { get; set; }
     public decimal DiscountPercent { get; set; }
     public Guid? PartId { get; set; }
+    public bool AddMissingItemToSystem { get; set; }
 }
 
 public class CreateQuoteRequest
@@ -102,7 +104,53 @@ public class UploadQuoteRequest
     public Guid SiteId { get; set; }
     public Guid? JobCardId { get; set; }
     public Guid? ServiceRequestId { get; set; }
+    public decimal? Amount { get; set; }
+    public decimal? GlobalDiscountPercent { get; set; }
+    public string? Description { get; set; }
+    public string? Notes { get; set; }
+    public DateTime? ValidUntil { get; set; }
+    public string? LineItemsJson { get; set; }
     public IFormFile? File { get; set; }
+}
+
+public class QuoteUploadPreviewRequest
+{
+    public Guid ClientId { get; set; }
+    public Guid SiteId { get; set; }
+    public IFormFile? File { get; set; }
+}
+
+public class QuoteUploadPreviewDto
+{
+    public string UploadedFileName { get; set; } = string.Empty;
+    public string? ExtractedQuoteNumber { get; set; }
+    public string? ExtractedSupplierName { get; set; }
+    public string? ExtractedSourceCompanyName { get; set; }
+    public string? ExtractedClientName { get; set; }
+    public string SelectedClientName { get; set; } = string.Empty;
+    public bool ClientNameMatchesSelected { get; set; }
+    public string? ExtractedText { get; set; }
+    public decimal? ExtractedAmount { get; set; }
+    public decimal? OverallDiscountPercent { get; set; }
+    public string Description { get; set; } = string.Empty;
+    public DateTime? ValidUntil { get; set; }
+    public List<QuoteUploadPreviewLineDto> LineItems { get; set; } = new();
+}
+
+public class QuoteUploadPreviewLineDto
+{
+    public string LineType { get; set; } = "Part";
+    public string Code { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public decimal Quantity { get; set; }
+    public decimal UnitPrice { get; set; }
+    public decimal DiscountPercent { get; set; }
+    public decimal VatPercent { get; set; }
+    public decimal ExclTotal { get; set; }
+    public decimal InclTotal { get; set; }
+    public Guid? SuggestedPartId { get; set; }
+    public string? SuggestedPartName { get; set; }
+    public string MatchStatus { get; set; } = "Unmatched";
 }
 
 public class LinkQuoteToJobCardRequest

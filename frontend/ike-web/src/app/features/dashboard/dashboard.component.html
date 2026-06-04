@@ -66,23 +66,31 @@
       </div>
     </div>
     }
-    @if (auth.role() !== 'Client') {
-    <div class="col-md-6 col-lg-4">
-      <div class="card border-0 shadow-sm h-100">
-        <div class="card-body d-flex flex-column">
-          <div class="d-flex align-items-start mb-3">
-            <span class="fs-2 text-danger me-2" aria-hidden="true">📦</span>
-            <div>
-              <h5 class="card-title mb-1">Low stock parts</h5>
-              <p class="display-6 mb-0 fw-bold text-danger">{{ lowStockPartsCount }}</p>
-            </div>
-          </div>
-          <a routerLink="/parts" class="btn btn-outline-danger btn-sm align-self-start">View parts</a>
-        </div>
-      </div>
-    </div>
-    }
   </div>
+
+  @if (dashboardIssues.length) {
+    <section class="mt-4">
+      <h2 class="h5 mb-2">System issues needing attention</h2>
+      <div class="list-group shadow-sm mb-4">
+        @for (issue of dashboardIssues; track issue.id) {
+          <div class="list-group-item d-flex justify-content-between align-items-start gap-3">
+            <div>
+              @if (issue.severity === 'danger') {
+                <span class="badge text-bg-danger me-2">Issue</span>
+              } @else if (issue.severity === 'warning') {
+                <span class="badge text-bg-warning me-2">Attention</span>
+              } @else {
+                <span class="badge text-bg-info me-2">Info</span>
+              }
+              <span class="fw-semibold">{{ issue.title }}</span>
+              <div class="small text-muted mt-1">{{ issue.detail }}</div>
+            </div>
+            <a [routerLink]="issue.routerLink" [queryParams]="issue.queryParams || null" class="btn btn-outline-primary btn-sm flex-shrink-0">{{ issue.actionLabel }}</a>
+          </div>
+        }
+      </div>
+    </section>
+  }
 
   @if ((auth.hasPermission('CreateJobCards') || auth.hasPermission('ProcessRequests')) && auth.role() !== 'Technician') {
   <div class="mt-4 mb-4">
@@ -97,38 +105,7 @@
   </div>
   }
 
-  @if (auth.role() !== 'Client' && auth.role() !== 'Technician') {
-  <h2 class="h5 mt-4 mb-2">Suggested next steps</h2>
-  <ul class="list-group list-group-flush mb-4">
-    @if (requestsWithoutJobCard > 0) {
-      <li class="list-group-item d-flex justify-content-between align-items-center">
-        <span>Create job cards for requests without a job card</span>
-        <a routerLink="/service-requests" class="btn btn-outline-primary btn-sm">Go to requests</a>
-      </li>
-    }
-    @if (completedJobsWithoutInvoice > 0) {
-      <li class="list-group-item d-flex justify-content-between align-items-center">
-        <span>Create invoices for completed jobs</span>
-        <a routerLink="/job-cards" class="btn btn-outline-primary btn-sm">Go to job cards</a>
-      </li>
-    }
-    @if (overdueInvoicesCount > 0) {
-      <li class="list-group-item d-flex justify-content-between align-items-center">
-        <span>Follow up on overdue invoices</span>
-        <a routerLink="/invoices" class="btn btn-outline-primary btn-sm">View invoices</a>
-      </li>
-    }
-    @if (lowStockPartsCount > 0) {
-      <li class="list-group-item d-flex justify-content-between align-items-center">
-        <span>Parts at or below reorder level</span>
-        <a routerLink="/parts" class="btn btn-outline-primary btn-sm">View parts</a>
-      </li>
-    }
-    @if (requestsWithoutJobCard === 0 && completedJobsWithoutInvoice === 0 && overdueInvoicesCount === 0 && lowStockPartsCount === 0 && unprocessedCount === 0 && ongoingCount === 0) {
-      <li class="list-group-item text-muted">No suggested actions right now. You’re all caught up—use the sidebar to jump to any section.</li>
-    }
-  </ul>
-  } @else if (auth.role() === 'Client') {
+  @if (auth.role() === 'Client') {
   <h2 class="h5 mt-4 mb-2">Quick links</h2>
   <p class="text-muted mb-2">View your <a routerLink="/service-requests">service requests</a> and <a routerLink="/job-cards">job cards</a> (including <a routerLink="/job-cards" [queryParams]="{ status: 'completed' }">completed job history</a>).</p>
   }

@@ -340,7 +340,7 @@ public class JobCardWorkController : ControllerBase
             .GroupBy(x => x.PartId)
             .ToDictionary(
                 g => g.Key,
-                g => (int)Math.Max(1, Math.Ceiling(g.Max(x => x.Quantity))));
+                g => g.Sum(x => (int)Math.Max(1, Math.Ceiling(x.Quantity))));
 
         var existing = await _db.JobCardPlannedParts
             .Where(jpp => jpp.JobCardId == jobId && requiredQtyByPart.Keys.Contains(jpp.PartId))
@@ -369,6 +369,11 @@ public class JobCardWorkController : ControllerBase
                 });
                 changed = true;
             }
+        }
+        if (requiredQtyByPart.Count > 0 && !job.PartsRequired)
+        {
+            job.PartsRequired = true;
+            changed = true;
         }
 
         if (changed)

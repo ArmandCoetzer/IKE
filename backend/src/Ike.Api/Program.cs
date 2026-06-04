@@ -277,6 +277,30 @@ using (var scope = app.Services.CreateScope())
                AND NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[dbo].[InvoiceLineItems]') AND name = 'DiscountPercent')
                 ALTER TABLE [InvoiceLineItems] ADD [DiscountPercent] decimal(5,2) NOT NULL CONSTRAINT [DF_InvoiceLineItems_DiscountPercent] DEFAULT (0);
         ");
+        // Ensure invoice upload columns exist (idempotent - for DBs with migration history drift)
+        await db.Database.ExecuteSqlRawAsync(@"
+            IF OBJECT_ID(N'[dbo].[Invoices]', N'U') IS NOT NULL
+               AND NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[dbo].[Invoices]') AND name = 'IsUploaded')
+                ALTER TABLE [Invoices] ADD [IsUploaded] bit NOT NULL CONSTRAINT [DF_Invoices_IsUploaded] DEFAULT (0);
+            IF OBJECT_ID(N'[dbo].[Invoices]', N'U') IS NOT NULL
+               AND NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[dbo].[Invoices]') AND name = 'UploadedFilePath')
+                ALTER TABLE [Invoices] ADD [UploadedFilePath] nvarchar(512) NULL;
+            IF OBJECT_ID(N'[dbo].[Invoices]', N'U') IS NOT NULL
+               AND NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[dbo].[Invoices]') AND name = 'UploadedFileName')
+                ALTER TABLE [Invoices] ADD [UploadedFileName] nvarchar(256) NULL;
+            IF OBJECT_ID(N'[dbo].[Invoices]', N'U') IS NOT NULL
+               AND NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[dbo].[Invoices]') AND name = 'UploadedContentType')
+                ALTER TABLE [Invoices] ADD [UploadedContentType] nvarchar(128) NULL;
+            IF OBJECT_ID(N'[dbo].[Invoices]', N'U') IS NOT NULL
+               AND NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[dbo].[Invoices]') AND name = 'UploadedAt')
+                ALTER TABLE [Invoices] ADD [UploadedAt] datetime2 NULL;
+            IF OBJECT_ID(N'[dbo].[Invoices]', N'U') IS NOT NULL
+               AND NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[dbo].[Invoices]') AND name = 'ExtractedInvoiceNumber')
+                ALTER TABLE [Invoices] ADD [ExtractedInvoiceNumber] nvarchar(128) NULL;
+            IF OBJECT_ID(N'[dbo].[Invoices]', N'U') IS NOT NULL
+               AND NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[dbo].[Invoices]') AND name = 'ExtractedText')
+                ALTER TABLE [Invoices] ADD [ExtractedText] nvarchar(max) NULL;
+        ");
         // Ensure quote discount columns exist (idempotent - for DBs with migration history drift)
         await db.Database.ExecuteSqlRawAsync(@"
             IF OBJECT_ID(N'[dbo].[Quotes]', N'U') IS NOT NULL

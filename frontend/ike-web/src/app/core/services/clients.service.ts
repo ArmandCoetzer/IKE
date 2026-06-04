@@ -64,6 +64,20 @@ export class ClientsService {
   update(id: string, body: UpdateClientRequest): Observable<ClientDto> {
     return this.http.put<ClientDto>(`${API}/${id}`, body);
   }
+
+  downloadImportTemplate(): Observable<Blob> {
+    return this.http.get(`${API}/import-template`, { responseType: 'blob' });
+  }
+
+  importPreview(file: File): Observable<ClientImportResultDto> {
+    const form = new FormData();
+    form.append('file', file);
+    return this.http.post<ClientImportResultDto>(`${API}/import-preview`, form);
+  }
+
+  importCommit(rows: ClientImportRowDto[]): Observable<ClientImportResultDto> {
+    return this.http.post<ClientImportResultDto>(`${API}/import-commit`, { rows });
+  }
 }
 
 export interface CreateClientRequest {
@@ -81,4 +95,25 @@ export interface UpdateClientRequest {
   email?: string;
   userId?: string;
   isActive?: boolean;
+}
+
+export interface ClientImportRowDto {
+  rowNumber: number;
+  companyName: string;
+  contactName?: string;
+  phone?: string;
+  email?: string;
+  siteName: string;
+  siteAddress?: string;
+  errors: string[];
+  createdClientId?: string;
+  createdSiteId?: string;
+}
+
+export interface ClientImportResultDto {
+  rows: ClientImportRowDto[];
+  failedRows: ClientImportRowDto[];
+  totalRows: number;
+  successCount: number;
+  failedCount: number;
 }

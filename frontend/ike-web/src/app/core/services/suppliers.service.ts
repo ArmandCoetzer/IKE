@@ -12,6 +12,8 @@ export interface SupplierDto {
   websiteUrl?: string;
   phone?: string;
   contactPerson?: string;
+  partIds: string[];
+  partNames: string[];
 }
 
 export interface CreateSupplierRequest {
@@ -20,6 +22,7 @@ export interface CreateSupplierRequest {
   websiteUrl?: string;
   phone?: string;
   contactPerson?: string;
+  partIds?: string[];
 }
 
 export interface UpdateSupplierRequest {
@@ -28,6 +31,7 @@ export interface UpdateSupplierRequest {
   websiteUrl?: string;
   phone?: string;
   contactPerson?: string;
+  partIds?: string[];
 }
 
 @Injectable({ providedIn: 'root' })
@@ -44,5 +48,9 @@ export class SuppliersService {
 
   update(id: string, req: UpdateSupplierRequest): Observable<SupplierDto> {
     return this.http.put<SupplierDto>(`${API}/${id}`, req);
+  }
+
+  delete(id: string): Observable<void> {
+    return this.http.delete<void>(`${API}/${id}`);
   }
 }

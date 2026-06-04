@@ -4,6 +4,7 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { PurchaseOrdersService, PurchaseOrderDto, UpdatePurchaseOrderRequest } from '../../../core/services/purchase-orders.service';
 import { PageHeaderComponent } from '../../../shared/page-header/page-header.component';
+import { ToastService } from '../../../core/services/toast.service';
 
 @Component({
   selector: 'app-purchase-order-edit',
@@ -29,7 +30,8 @@ export class PurchaseOrderEditComponent implements OnInit {
   constructor(
     private route: ActivatedRoute,
     private router: Router,
-    private purchaseOrdersService: PurchaseOrdersService
+    private purchaseOrdersService: PurchaseOrdersService,
+    private toast: ToastService
   ) {}
 
   ngOnInit(): void {
@@ -41,11 +43,7 @@ export class PurchaseOrderEditComponent implements OnInit {
     this.loading = true;
     this.purchaseOrdersService.get(this.id).subscribe({
       next: (po) => {
-        this.item = po;
-        this.clientPONumber = po.clientPONumber ?? '';
-        this.amount = po.amount ?? 0;
-        this.currency = po.currency ?? 'ZAR';
-        this.notes = po.notes ?? '';
+        this.applyPurchaseOrder(po);
         this.loading = false;
       },
       error: () => {
@@ -53,6 +51,14 @@ export class PurchaseOrderEditComponent implements OnInit {
         this.loading = false;
       }
     });
+  }
+
+  private applyPurchaseOrder(po: PurchaseOrderDto): void {
+    this.item = po;
+    this.clientPONumber = po.clientPONumber ?? '';
+    this.amount = po.amount ?? 0;
+    this.currency = po.currency ?? 'ZAR';
+    this.notes = po.notes ?? '';
   }
 
   onClientPOFileSelected(event: Event): void {
@@ -94,10 +100,15 @@ export class PurchaseOrderEditComponent implements OnInit {
       notes: this.notes.trim() || undefined
     };
     this.purchaseOrdersService.update(this.id, body).subscribe({
-      next: () => this.router.navigate(['/purchase-orders', this.id]),
+      next: (purchaseOrder) => {
+        this.submitting = false;
+        this.applyPurchaseOrder(purchaseOrder);
+        this.toast.success('Purchase order updated.');
+      },
       error: (err) => {
         this.submitting = false;
         this.error = err.error?.message || 'Failed to update purchase order.';
+        this.toast.error(this.error!);
       }
     });
   }

@@ -1,6 +1,7 @@
 <div class="container-fluid">
   <app-page-header title="Parts">
     @if (auth.hasPermission('ManagePurchaseOrders')) {
+      <button type="button" class="btn btn-outline-primary me-2" (click)="openImportDialog()">Import parts</button>
       <a routerLink="/parts/new" class="btn btn-primary">Add part</a>
     }
   </app-page-header>
@@ -12,6 +13,27 @@
     </div>
     <span class="text-muted">{{ filtered.length }} of {{ parts.length }} part{{ parts.length === 1 ? '' : 's' }}</span>
   </div>
+  @if (auth.hasPermission('ManagePurchaseOrders')) {
+    <div class="d-flex gap-2 align-items-center flex-wrap mb-2">
+      <button type="button" class="btn btn-outline-danger btn-sm" (click)="deleteSelectedParts()" [disabled]="!someSelected || bulkDeleting">
+        {{ bulkDeleting ? 'Deleting...' : 'Delete selected' }}
+      </button>
+      @if (someSelected) {
+        <span class="text-muted small">{{ selectedPartIds.size }} selected</span>
+      }
+    </div>
+  }
+  @if (bulkDeleteFailures.length) {
+    <div class="alert alert-warning alert-dismissible">
+      <button type="button" class="btn-close" aria-label="Close" (click)="bulkDeleteFailures = []"></button>
+      <div class="fw-semibold mb-1">Some selected parts could not be deleted:</div>
+      <ul class="mb-0">
+        @for (failure of bulkDeleteFailures; track failure) {
+          <li>{{ failure }}</li>
+        }
+      </ul>
+    </div>
+  }
   @if (loading) {
     <p>Loading...</p>
   } @else if (filtered.length === 0) {
@@ -28,6 +50,9 @@
     <app-table>
         <thead>
           <tr>
+            @if (auth.hasPermission('ManagePurchaseOrders')) {
+              <th><input type="checkbox" [checked]="allSelected" [indeterminate]="someSelected && !allSelected" (change)="toggleSelectAll($any($event.target).checked)" aria-label="Select all filtered parts" /></th>
+            }
             <th>Name</th>
             <th>Part #</th>
             <th>Quantity</th>
@@ -39,44 +64,45 @@
           </tr>
         </thead>
         <tbody>
-          @for (p of filtered | slice:(page - 1) * pageSize : page * pageSize; track p.id) {
+          @for (p of pagedFiltered; track p.id) {
             <tr>
+              @if (auth.hasPermission('ManagePurchaseOrders')) {
+                <td><input type="checkbox" [checked]="isSelected(p.id)" (change)="toggleSelect(p.id, $any($event.target).checked)" [attr.aria-label]="'Select ' + p.name" /></td>
+              }
               <td><span class="fw-semibold">{{ p.name }}</span></td>
               <td>{{ p.partNumber || '—' }}</td>
-              <td>{{ p.quantity }}</td>
+              <td>
+                {{ guaranteedQuantity(p) }}
+                @if (activeJobsTaken(p) > 0) {
+                  <span class="text-muted">({{ activeJobsTaken(p) }} taken for active jobs)</span>
+                }
+              </td>
               <td>{{ p.reorderLevel }}</td>
               <td>ZAR {{ (p.unitPrice ?? 0) | number:'1.2-2' }}</td>
               <td>{{ (p.unit || '—').toLowerCase() === 'each' ? 'unit/s' : (p.unit || '—') }}</td>
               <td>
-                {{ p.supplierNames?.length ? p.supplierNames?.join(', ') : (p.supplierName || '—') }}
+                {{ p.supplierNames.length ? p.supplierNames.join(', ') : (p.supplierName || '—') }}
                 @if (p.isLowStock && !p.isLabour && p.supplierId && !p.hasSupplierEmail) {
-                  <span class="badge bg-danger ms-1">Missing supplier email</span>
+                  <span class="badge bg-danger ms-1">Supplier missing</span>
                 }
               </td>
               <td class="parts-actions-cell">
                 <div class="parts-actions">
-                  @if (auth.hasPermission('ManagePurchaseOrders') && p.isLowStock && !p.isLabour) {
-                    @if (canRequestStock(p)) {
-                      <a
-                        class="btn btn-warning btn-sm"
-                        [routerLink]="['/supplier-quote-requests/new']"
-                        [queryParams]="{
-                          partId: p.id,
-                          supplierId: p.supplierId || '',
-                          requestedQuantity: stockRequestQuantity(p),
-                          notes: 'Low stock request: ' + p.name + ' (have ' + p.quantity + ', reorder ' + p.reorderLevel + ')',
-                          returnTo: '/parts'
-                        }">
-                        Request stock
-                      </a>
-                    } @else if (!p.isLabour) {
-                      <span class="badge text-bg-danger">Supplier email missing</span>
-                    }
-                    @if ((!p.supplierId || !p.hasSupplierEmail) && !p.isLabour) {
-                      <a class="btn btn-sm btn-outline-secondary" [routerLink]="['/parts', p.id, 'edit']">Add supplier</a>
-                    }
+                  @if (hasPartSetupIssue(p)) {
+                    <span class="parts-issue-indicator" [title]="partIssueTitle(p)" [attr.aria-label]="partIssueTitle(p)">!</span>
+                  }
+                  @if (auth.hasPermission('ManagePurchaseOrders') && !p.isLabour) {
+                    <button type="button" class="btn btn-sm btn-warning" (click)="openRestockDialog(p)">Restock</button>
+                  }
+                  @if (auth.hasPermission('ManagePurchaseOrders') && needsPartSetupFix(p)) {
+                    <a class="btn btn-sm btn-outline-secondary" [routerLink]="['/parts', p.id, 'edit']">Fix item</a>
                   }
                   <a class="btn btn-sm btn-outline-primary" [routerLink]="['/parts', p.id]">View</a>
+                  @if (auth.hasPermission('ManagePurchaseOrders')) {
+                    <button type="button" class="btn btn-sm btn-outline-danger" (click)="deletePart(p)" [disabled]="deletingPartId === p.id">
+                      {{ deletingPartId === p.id ? 'Deleting...' : 'Delete' }}
+                    </button>
+                  }
                 </div>
               </td>
             </tr>
@@ -86,3 +112,136 @@
     <app-table-pagination [totalCount]="filtered.length" [page]="page" [pageSize]="pageSize" (pageChange)="page = $event" />
   }
 </div>
+
+@if (restockPart) {
+  <div class="modal d-block" tabindex="-1" role="dialog" style="background: rgba(0,0,0,.5)">
+    <div class="modal-dialog" role="document">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Restock {{ restockPart.name }}</h5>
+          <button type="button" class="btn-close" aria-label="Close" (click)="closeRestockDialog()" [disabled]="restockSaving"></button>
+        </div>
+        <form (ngSubmit)="saveRestockQuantity()">
+          <div class="modal-body">
+            @if (restockError) {
+              <div class="alert alert-danger">{{ restockError }}</div>
+            }
+            <div class="mb-3">
+              <label class="form-label">Reorder value</label>
+              <input type="number" class="form-control" [value]="restockPart.reorderLevel" readonly />
+            </div>
+            <div class="mb-0">
+              <label class="form-label">Quantity</label>
+              <input type="number" class="form-control" [(ngModel)]="restockQuantity" name="restockQuantity" min="0" step="1" [disabled]="restockSaving" />
+              <div class="form-text">Starts at the reorder value. Saving updates only this part's current quantity.</div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-light border" (click)="closeRestockDialog()" [disabled]="restockSaving">Cancel</button>
+            <button type="submit" class="btn btn-primary" [disabled]="restockSaving">
+              {{ restockSaving ? 'Saving...' : 'Save quantity' }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+}
+
+@if (importOpen) {
+  <div class="modal d-block" tabindex="-1" role="dialog" style="background: rgba(0,0,0,.5)">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable" role="document">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Import parts</h5>
+          <button type="button" class="btn-close" aria-label="Close" (click)="closeImportDialog()" [disabled]="importBusy"></button>
+        </div>
+        <div class="modal-body">
+          @if (importError) {
+            <div class="alert alert-danger">{{ importError }}</div>
+          }
+          <div class="d-flex gap-2 align-items-center mb-3">
+            <span class="badge" [class.text-bg-primary]="importStep === 'select'" [class.text-bg-secondary]="importStep !== 'select'">1. Select file</span>
+            <span class="badge" [class.text-bg-primary]="importStep === 'review'" [class.text-bg-secondary]="importStep !== 'review'">2. Review and upload</span>
+          </div>
+          @if (importStep === 'select') {
+            <p class="text-muted small">Use the Excel template for dropdowns on Unit and Is Labour. Suppliers are intentionally left out and can be added after import.</p>
+            <button type="button" class="btn btn-outline-secondary btn-sm mb-3" (click)="downloadImportTemplate()">Download Excel template</button>
+            <input type="file" class="form-control" accept=".xlsx" (change)="onImportFileSelected($event)" [disabled]="importBusy" />
+            @if (importBusy) {
+              <p class="small text-muted mt-2 mb-0">Reading file...</p>
+            }
+          } @else {
+            <div class="d-flex justify-content-between align-items-center gap-2 flex-wrap mb-2">
+              <p class="text-muted small mb-0">Click a row to edit it. Failed rows stay here after upload so you can correct and retry.</p>
+              <div class="d-flex gap-2">
+                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="downloadFailedImportRows()" [disabled]="importRows.length === 0">Download rows</button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="importStep = 'select'" [disabled]="importBusy">Choose another file</button>
+              </div>
+            </div>
+            <app-table [compact]="true">
+              <thead>
+                <tr>
+                  <th>Row</th>
+                  <th>Name</th>
+                  <th>Part #</th>
+                  <th>Qty</th>
+                  <th>Reorder</th>
+                  <th>Unit</th>
+                  <th>Unit price</th>
+                  <th>Labour</th>
+                  <th>Errors</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (row of importRows; track row.rowNumber) {
+                  <tr [class.table-danger]="row.errors.length">
+                    <td>{{ row.rowNumber }}</td>
+                    @if (editingImportRow === row.rowNumber) {
+                      <td>
+                        <input class="form-control form-control-sm mb-1" [(ngModel)]="row.name" name="partImportName{{row.rowNumber}}" />
+                        <input class="form-control form-control-sm" [(ngModel)]="row.description" name="partImportDescription{{row.rowNumber}}" placeholder="Description" />
+                      </td>
+                      <td><input class="form-control form-control-sm" [(ngModel)]="row.partNumber" name="partImportNumber{{row.rowNumber}}" /></td>
+                      <td><input type="number" class="form-control form-control-sm ike-line-qty-input" [(ngModel)]="row.quantity" name="partImportQty{{row.rowNumber}}" /></td>
+                      <td><input type="number" class="form-control form-control-sm ike-line-qty-input" [(ngModel)]="row.reorderLevel" name="partImportReorder{{row.rowNumber}}" /></td>
+                      <td><input class="form-control form-control-sm" [(ngModel)]="row.unit" name="partImportUnit{{row.rowNumber}}" /></td>
+                      <td><input type="number" class="form-control form-control-sm ike-line-price-input" [(ngModel)]="row.unitPrice" name="partImportPrice{{row.rowNumber}}" step="0.01" /></td>
+                      <td><input type="checkbox" class="form-check-input" [(ngModel)]="row.isLabour" name="partImportLabour{{row.rowNumber}}" /></td>
+                      <td class="small text-danger">{{ row.errors.join('; ') || '—' }}</td>
+                      <td><button type="button" class="btn btn-sm btn-outline-primary" (click)="stopEditImportRow()">Done</button></td>
+                    } @else {
+                      <td>
+                        <div>{{ row.name || '—' }}</div>
+                        @if (row.description) {
+                          <div class="small text-muted">{{ row.description }}</div>
+                        }
+                      </td>
+                      <td>{{ row.partNumber || '—' }}</td>
+                      <td>{{ row.quantity }}</td>
+                      <td>{{ row.reorderLevel }}</td>
+                      <td>{{ row.unit || '—' }}</td>
+                      <td>ZAR {{ row.unitPrice | number:'1.2-2' }}</td>
+                      <td>{{ row.isLabour ? 'Yes' : 'No' }}</td>
+                      <td class="small text-danger">{{ row.errors.join('; ') || '—' }}</td>
+                      <td><button type="button" class="btn btn-sm btn-outline-secondary" (click)="startEditImportRow(row)">Edit</button></td>
+                    }
+                  </tr>
+                }
+              </tbody>
+            </app-table>
+          }
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-light border" (click)="closeImportDialog()" [disabled]="importBusy">Close</button>
+          @if (importStep === 'review') {
+            <button type="button" class="btn btn-primary" (click)="commitImportRows()" [disabled]="importBusy || importRows.length === 0">
+              {{ importBusy ? 'Uploading...' : 'Upload parts' }}
+            </button>
+          }
+        </div>
+      </div>
+    </div>
+  </div>
+}

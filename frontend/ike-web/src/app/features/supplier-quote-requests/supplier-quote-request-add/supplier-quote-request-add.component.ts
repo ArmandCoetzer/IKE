@@ -1,6 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { ActivatedRoute, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { SupplierQuoteEmailDraftDto, SupplierQuoteRequestsService } from '../../../core/services/supplier-quote-requests.service';
 import { PartsService, PartDto } from '../../../core/services/parts.service';
@@ -33,6 +33,7 @@ export class SupplierQuoteRequestAddComponent implements OnInit {
 
   constructor(
     private route: ActivatedRoute,
+    private router: Router,
     private service: SupplierQuoteRequestsService,
     private partsService: PartsService
   ) {}
@@ -41,13 +42,14 @@ export class SupplierQuoteRequestAddComponent implements OnInit {
     const q = this.route.snapshot.queryParams;
     this.returnTo = sanitizeInternalReturnTo(q['returnTo']);
     const preselectedPartId = q['partId'] ?? null;
+    const preselectedSupplierId = q['supplierId'] ?? null;
     const requestedQuantity = Number(q['requestedQuantity']);
     this.partsService.list(false).subscribe({
       next: (list) => {
         this.parts = list.filter(p => !p.isLabour);
         this.partRows = this.parts.map(part => ({
           part,
-          selected: part.id === preselectedPartId,
+          selected: part.id === preselectedPartId || this.partLinkedToSupplier(part, preselectedSupplierId),
           requestedQuantity: part.id === preselectedPartId && Number.isFinite(requestedQuantity) && requestedQuantity > 0
             ? requestedQuantity
             : this.defaultRequestedQuantity(part)
@@ -72,6 +74,29 @@ export class SupplierQuoteRequestAddComponent implements OnInit {
     return this.partRows.filter(r => r.selected);
   }
 
+  get selectablePartRows(): PartRequestRow[] {
+    return this.partRows.filter(r => this.partHasLinkedSupplier(r.part));
+  }
+
+  get allSelectablePartsSelected(): boolean {
+    const rows = this.selectablePartRows;
+    return rows.length > 0 && rows.every(r => r.selected);
+  }
+
+  get someSelectablePartsSelected(): boolean {
+    return this.selectablePartRows.some(r => r.selected);
+  }
+
+  toggleSelectAllParts(checked: boolean): void {
+    for (const row of this.partRows) {
+      if (!this.partHasLinkedSupplier(row.part)) continue;
+      row.selected = checked;
+      if (checked && (!row.requestedQuantity || row.requestedQuantity < 1)) {
+        row.requestedQuantity = this.defaultRequestedQuantity(row.part);
+      }
+    }
+  }
+
   get anyDraftSending(): boolean {
     return this.drafts.some(d => d.sending);
   }
@@ -90,11 +115,24 @@ export class SupplierQuoteRequestAddComponent implements OnInit {
     return !!part.supplierId || (part.supplierIds?.length ?? 0) > 0;
   }
 
+  partLinkedToSupplier(part: PartDto, supplierId: string | null): boolean {
+    if (!supplierId) return false;
+    return part.supplierId === supplierId || (part.supplierIds ?? []).includes(supplierId);
+  }
+
   onPartChecked(row: PartRequestRow, checked: boolean): void {
     row.selected = checked;
     if (checked && (!row.requestedQuantity || row.requestedQuantity < 1)) {
       row.requestedQuantity = this.defaultRequestedQuantity(row.part);
     }
+  }
+
+  cancel(): void {
+    if (this.returnTo) {
+      this.router.navigateByUrl(this.returnTo);
+      return;
+    }
+    this.router.navigate(['/supplier-quote-requests/list']);
   }
 
   save(): void {

@@ -45,6 +45,7 @@ public class JobCardListDto
     public DateTime CreatedAt { get; set; }
     /// <summary>Comma-separated names of assigned technicians.</summary>
     public string? AssignedTechnicianNames { get; set; }
+    public string? InvoiceStatus { get; set; }
     /// <summary>When set, job is blocked (highest-priority job cannot be opened until cleared or overridden).</summary>
     public string? BlockedReason { get; set; }
 }

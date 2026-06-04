@@ -10,8 +10,15 @@
         <a class="btn btn-outline-secondary btn-sm" [routerLink]="['/invoices', item.id, 'edit']">Edit</a>
       }
       <button type="button" class="btn btn-outline-primary btn-sm" (click)="downloadPdf()">Download PDF</button>
+      @if (item.isUploaded) {
+        <button type="button" class="btn btn-outline-primary btn-sm" (click)="previewUploadedInvoice()">Preview uploaded invoice</button>
+        <button type="button" class="btn btn-outline-primary btn-sm" (click)="downloadUploadedInvoice()">Download</button>
+      }
       @if (auth.hasPermission('ManageInvoices')) {
         <button type="button" class="btn btn-outline-primary btn-sm" (click)="sendToClient()" [disabled]="sending || !item.partsConfirmed" [title]="!item.partsConfirmed ? 'Confirm parts before sending' : ''">{{ sending ? 'Sending…' : 'Send to client again' }}</button>
+        <button type="button" class="btn btn-outline-danger btn-sm" (click)="deleteInvoice()" [disabled]="deleting">
+          {{ deleting ? 'Deleting...' : 'Delete' }}
+        </button>
       }
       @if (item.status !== 'Paid' && auth.hasPermission('ManageInvoices')) {
         <button type="button" class="btn btn-outline-warning btn-sm" (click)="sendReminder()" [disabled]="sendingReminder">{{ sendingReminder ? 'Sending…' : 'Send reminder' }}</button>
@@ -22,7 +29,7 @@
   @if (actionError) {
     <p class="text-danger mb-2">{{ actionError }}</p>
   }
-  @if (item && !item.partsConfirmed && item.lineItems?.length) {
+  @if (item && !item.partsConfirmed && item.lineItems.length) {
     <div class="alert alert-warning mb-3">
       <strong>Parts not confirmed.</strong> Review and confirm the parts used before sending the invoice to the client.
     </div>
@@ -53,8 +60,17 @@
           }
           <dt class="col-sm-2">Parts confirmed</dt>
           <dd class="col-sm-10">{{ item.partsConfirmed ? 'Yes' : 'No' }}</dd>
+          @if (item.isUploaded) {
+            <dt class="col-sm-2">Uploaded invoice</dt>
+            <dd class="col-sm-10">
+              {{ item.uploadedFileName || 'Original uploaded file' }}
+              @if (item.extractedInvoiceNumber) {
+                <span class="text-muted">(original # {{ item.extractedInvoiceNumber }})</span>
+              }
+            </dd>
+          }
         </dl>
-        @if (item.lineItems?.length) {
+        @if (item.lineItems.length) {
           <h6 class="mt-4 mb-2">Line items</h6>
           <div class="ike-data-table">
             <table class="table table-sm">
@@ -78,7 +94,7 @@
               </tbody>
             </table>
           </div>
-          <app-table-pagination [totalCount]="item.lineItems?.length ?? 0" [page]="lineItemsPage" [pageSize]="lineItemsPageSize" (pageChange)="lineItemsPage = $event" />
+          <app-table-pagination [totalCount]="item.lineItems.length" [page]="lineItemsPage" [pageSize]="lineItemsPageSize" (pageChange)="lineItemsPage = $event" />
           @if (discountFromLines > 0) {
             <p class="small mb-1 text-muted mt-2">Old total (before discount): R{{ subtotalFromLines | number:'1.2-2' }} <span class="text-danger">(-R{{ discountFromLines | number:'1.2-2' }})</span></p>
           }
@@ -91,5 +107,32 @@
         }
       </div>
     </div>
+    @if (uploadedPreviewOpen) {
+      <div class="modal d-block" tabindex="-1" role="dialog" style="background: rgba(0,0,0,.5)">
+        <div class="modal-dialog modal-xl modal-dialog-scrollable" role="document">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title">Uploaded invoice preview</h5>
+              <button type="button" class="btn-close" aria-label="Close" (click)="closeUploadedPreview()"></button>
+            </div>
+            <div class="modal-body">
+              @if (uploadedPreviewLoading) {
+                <p class="text-muted mb-0">Loading preview...</p>
+              } @else if (uploadedPreviewSafeUrl) {
+                @if (uploadedPreviewIsImage) {
+                  <img [src]="uploadedPreviewSafeUrl" class="img-fluid d-block mx-auto" alt="Uploaded invoice preview" />
+                } @else {
+                  <iframe [src]="uploadedPreviewSafeUrl" title="Uploaded invoice preview" class="w-100 border rounded" style="height: 75vh;"></iframe>
+                }
+              }
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-outline-primary" (click)="downloadUploadedInvoice()">Download</button>
+              <button type="button" class="btn btn-light border" (click)="closeUploadedPreview()">Close</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    }
   }
 </div>

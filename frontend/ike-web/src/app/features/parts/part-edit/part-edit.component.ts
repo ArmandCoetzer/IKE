@@ -5,6 +5,7 @@ import { FormsModule } from '@angular/forms';
 import { PartsService, PartDto, UpdatePartRequest } from '../../../core/services/parts.service';
 import { SuppliersService, SupplierDto } from '../../../core/services/suppliers.service';
 import { PageHeaderComponent } from '../../../shared/page-header/page-header.component';
+import { ToastService } from '../../../core/services/toast.service';
 
 @Component({
   selector: 'app-part-edit',
@@ -37,7 +38,8 @@ export class PartEditComponent implements OnInit {
     private route: ActivatedRoute,
     private router: Router,
     private partsService: PartsService,
-    private suppliersService: SuppliersService
+    private suppliersService: SuppliersService,
+    private toast: ToastService
   ) {}
 
   ngOnInit(): void {
@@ -49,17 +51,7 @@ export class PartEditComponent implements OnInit {
     this.suppliersService.list().subscribe({ next: (s) => (this.suppliers = s) });
     this.partsService.get(this.id).subscribe({
       next: (p: PartDto) => {
-        this.name = p.name ?? '';
-        this.description = p.description ?? '';
-        this.partNumber = p.partNumber ?? '';
-        this.quantity = p.quantity ?? 0;
-        this.reorderLevel = p.reorderLevel ?? 0;
-        this.unit = p.unit ?? '';
-        this.unitPrice = p.unitPrice ?? 0;
-        this.isLabour = p.isLabour ?? false;
-        if (this.isLabour) this.unit = this.labourUnit;
-        this.supplierId = p.supplierId ?? null;
-        this.supplierIds = p.supplierIds ?? (p.supplierId ? [p.supplierId] : []);
+        this.applyPart(p);
         this.loading = false;
       },
       error: () => {
@@ -67,6 +59,20 @@ export class PartEditComponent implements OnInit {
         this.loading = false;
       }
     });
+  }
+
+  private applyPart(p: PartDto): void {
+    this.name = p.name ?? '';
+    this.description = p.description ?? '';
+    this.partNumber = p.partNumber ?? '';
+    this.quantity = p.quantity ?? 0;
+    this.reorderLevel = p.reorderLevel ?? 0;
+    this.unit = p.unit ?? '';
+    this.unitPrice = p.unitPrice ?? 0;
+    this.isLabour = p.isLabour ?? false;
+    if (this.isLabour) this.unit = this.labourUnit;
+    this.supplierId = p.supplierId ?? null;
+    this.supplierIds = p.supplierIds ?? (p.supplierId ? [p.supplierId] : []);
   }
 
   onIsLabourChange(): void {
@@ -127,11 +133,13 @@ export class PartEditComponent implements OnInit {
     this.partsService.update(this.id, body).subscribe({
       next: (part) => {
         this.submitting = false;
-        this.router.navigate(['/parts', part.id]);
+        this.applyPart(part);
+        this.toast.success('Part updated.');
       },
       error: (err) => {
         this.submitting = false;
         this.error = err.error?.message || 'Failed to update part.';
+        this.toast.error(this.error!);
       }
     });
   }

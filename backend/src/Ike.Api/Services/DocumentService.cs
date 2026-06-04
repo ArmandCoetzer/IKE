@@ -60,7 +60,7 @@ public class DocumentService : IDocumentService
                         }
                         decimal LineDiscount(QuoteLineItem li)
                         {
-                            if (discountMode == "peritem")
+                            if (discountMode == "peritem" || discountMode == "peritemandglobal")
                             {
                                 var sub = LineSubtotal(li);
                                 var pct = li.DiscountPercent < 0 ? 0 : (li.DiscountPercent > 100 ? 100 : li.DiscountPercent);
@@ -76,7 +76,7 @@ public class DocumentService : IDocumentService
                         var perItemDiscountTotal = quote.LineItems.Sum(LineDiscount);
                         var afterPerItem = Math.Round(Math.Max(0m, subtotal - perItemDiscountTotal), 2, MidpointRounding.AwayFromZero);
                         var globalDiscount = 0m;
-                        if (discountMode == "global")
+                        if (discountMode == "global" || discountMode == "peritemandglobal")
                         {
                             var gp = quote.GlobalDiscountPercent < 0 ? 0 : (quote.GlobalDiscountPercent > 100 ? 100 : quote.GlobalDiscountPercent);
                             globalDiscount = Math.Round(afterPerItem * (gp / 100m), 2, MidpointRounding.AwayFromZero);

@@ -19,6 +19,7 @@ export interface JobCardListDto {
   dueDate?: string;
   createdAt: string;
   assignedTechnicianNames?: string;
+  invoiceStatus?: string;
   blockedReason?: string;
 }
 

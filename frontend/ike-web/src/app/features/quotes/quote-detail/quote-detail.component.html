@@ -12,12 +12,16 @@
         }
       }
       @if (item.isUploaded) {
-        <button type="button" class="btn btn-outline-primary btn-sm" (click)="downloadUploadedQuote()">Download uploaded quote</button>
+        <button type="button" class="btn btn-outline-primary btn-sm" (click)="previewUploadedQuote()">Preview uploaded quote</button>
+        <button type="button" class="btn btn-outline-primary btn-sm" (click)="downloadUploadedQuote()">Download</button>
       } @else {
         <button type="button" class="btn btn-outline-primary btn-sm" (click)="downloadPdf()">Download PDF</button>
       }
       @if (auth.hasPermission('ManagePurchaseOrders')) {
         <button type="button" class="btn btn-outline-primary btn-sm" (click)="sendToClient()" [disabled]="sending || item.status === 'Cancelled'">{{ sending ? 'Sending…' : sendToClientLabel }}</button>
+        <button type="button" class="btn btn-outline-danger btn-sm" (click)="deleteQuote()" [disabled]="deleting">
+          {{ deleting ? 'Deleting...' : 'Delete' }}
+        </button>
       }
       @if (isClientUser && item.status === 'Sent') {
         <button type="button" class="btn btn-success btn-sm" (click)="acceptByClient()" [disabled]="accepting">{{ accepting ? 'Saving…' : 'Accept quote' }}</button>
@@ -67,6 +71,8 @@
           <dd class="col-sm-10">
             @if (item.discountMode === 'Global') {
               Global {{ item.globalDiscountPercent || 0 | number:'1.2-2' }}%
+            } @else if (item.discountMode === 'PerItemAndGlobal') {
+              Per-item + overall {{ item.globalDiscountPercent || 0 | number:'1.2-2' }}%
             } @else if (item.discountMode === 'PerItem') {
               Per-item
             } @else {
@@ -98,12 +104,6 @@
           @if (item.notes) {
             <dt class="col-sm-2">Notes</dt>
             <dd class="col-sm-10">{{ item.notes }}</dd>
-          }
-          @if (item.extractedText) {
-            <dt class="col-sm-2">Extracted text</dt>
-            <dd class="col-sm-10">
-              <pre class="small bg-light border rounded p-2 mb-0 text-wrap">{{ item.extractedText }}</pre>
-            </dd>
           }
         </dl>
         <hr class="my-4" />
@@ -149,5 +149,32 @@
         }
       </div>
     </div>
+    @if (uploadedPreviewOpen) {
+      <div class="modal d-block" tabindex="-1" role="dialog" style="background: rgba(0,0,0,.5)">
+        <div class="modal-dialog modal-xl modal-dialog-scrollable" role="document">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title">Uploaded quote preview</h5>
+              <button type="button" class="btn-close" aria-label="Close" (click)="closeUploadedPreview()"></button>
+            </div>
+            <div class="modal-body">
+              @if (uploadedPreviewLoading) {
+                <p class="text-muted mb-0">Loading preview...</p>
+              } @else if (uploadedPreviewSafeUrl) {
+                @if (uploadedPreviewIsImage) {
+                  <img [src]="uploadedPreviewSafeUrl" class="img-fluid d-block mx-auto" alt="Uploaded quote preview" />
+                } @else {
+                  <iframe [src]="uploadedPreviewSafeUrl" title="Uploaded quote preview" class="w-100 border rounded" style="height: 75vh;"></iframe>
+                }
+              }
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-outline-primary" (click)="downloadUploadedQuote()">Download</button>
+              <button type="button" class="btn btn-light border" (click)="closeUploadedPreview()">Close</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    }
   }
 </div>

@@ -28,7 +28,7 @@
             </div>
             <div class="col-md-6">
               <label class="form-label">Site</label>
-              <select class="form-select" [(ngModel)]="siteId" name="siteId" required [disabled]="fromServiceRequest || !clientId">
+              <select class="form-select" [(ngModel)]="siteId" name="siteId" required [disabled]="fromServiceRequest || !clientId" (ngModelChange)="onSiteChange()">
                 <option [ngValue]="null">— Select site —</option>
                 @for (s of sites; track s.id) {
                   <option [ngValue]="s.id">{{ s.name }}</option>
@@ -89,10 +89,27 @@
           @if (quoteInputMode === 'upload') {
             <div class="mb-3">
               <label class="form-label">Quote file</label>
-              <input type="file" class="form-control" name="uploadedQuoteFile" accept=".pdf,.png,.jpg,.jpeg,.webp,.txt,.csv" (change)="onUploadedQuoteSelected($event)" />
-              <span class="form-text">PDF, image, TXT or CSV. Text-based files may have amount, supplier and quote number extracted automatically. Uploaded quotes are read-only after saving.</span>
+              <input type="file" class="form-control" name="uploadedQuoteFile" accept=".pdf,.png,.jpg,.jpeg,.webp,.txt,.csv" [disabled]="!clientId || !siteId || uploadPreviewLoading" (change)="onUploadedQuoteSelected($event)" />
+              @if (!clientId || !siteId) {
+                <span class="form-text text-warning">Select a client and site before uploading a quote document.</span>
+              } @else {
+                <span class="form-text">PDF, image, TXT or CSV. Extraction starts automatically and must be approved before saving.</span>
+              }
               @if (uploadedQuoteFile) {
-                <p class="small text-muted mt-2 mb-0">Selected: {{ uploadedQuoteFile.name }}</p>
+                <div class="d-flex align-items-center gap-2 flex-wrap mt-2">
+                  <p class="small text-muted mb-0">Selected: {{ uploadedQuoteFile.name }}</p>
+                  @if (uploadPreviewApproved) {
+                    <span class="badge bg-success">Approved</span>
+                  } @else if (uploadPreviewReady) {
+                    <span class="badge bg-warning text-dark">Needs approval</span>
+                  }
+                  @if (uploadPreviewReady) {
+                    <button type="button" class="btn btn-outline-secondary btn-sm" (click)="openUploadPreviewDialog()">Review / amend</button>
+                  }
+                </div>
+              }
+              @if (uploadPreviewLoading) {
+                <p class="small text-muted mt-2 mb-0">Extracting quote details...</p>
               }
             </div>
           } @else if (quoteInputMode === 'materials') {
@@ -117,7 +134,7 @@
                             <select class="form-select form-select-sm" [(ngModel)]="li.partId" (ngModelChange)="onPartSelect((lineItemsPage - 1) * lineItemsPageSize + $index, $event)" name="part{{(lineItemsPage - 1) * lineItemsPageSize + $index}}">
                               <option [ngValue]="null">— Select {{ li.lineType === 'Labour' ? 'labour' : 'part' }} —</option>
                               @for (p of partsForLineType(li.lineType); track p.id) {
-                                <option [ngValue]="p.id">{{ p.name }}{{ p.isLabour ? '' : ' (' + p.quantity + ' in stock)' }}</option>
+                                <option [ngValue]="p.id">{{ stockDisplayLabel(p) }}</option>
                               }
                             </select>
                           </td>
@@ -191,6 +208,130 @@
             }
           </div>
         </form>
+        @if (uploadPreviewDialogOpen) {
+          <div class="modal d-block" tabindex="-1" role="dialog" style="background: rgba(0,0,0,.5)">
+            <div class="modal-dialog modal-xl modal-dialog-scrollable" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h5 class="modal-title">Review extracted quote</h5>
+                  <button type="button" class="btn-close" aria-label="Close" (click)="closeUploadPreviewDialog()"></button>
+                </div>
+                <div class="modal-body">
+                  <div class="d-flex justify-content-between gap-3 flex-wrap mb-3">
+                    <p class="small text-muted mb-0">Correct anything that was read incorrectly, map stock where possible, then approve these details before saving the quote.</p>
+                    <div class="small text-muted">
+                      @if (extractedQuoteNumber) {
+                        <span class="me-3">Original #: {{ extractedQuoteNumber }}</span>
+                      }
+                      @if (extractedSourceCompanyName) {
+                        <span>From: {{ extractedSourceCompanyName }}</span>
+                      }
+                    </div>
+                  </div>
+                  <div class="mb-3">
+                    @if (clientNameMatchesSelected) {
+                      <div class="alert alert-success py-2 mb-0">
+                        Quote client matches selected client: <strong>{{ extractedClientName || selectedClientNameFromPreview }}</strong>
+                      </div>
+                    } @else {
+                      <div class="alert alert-warning py-2 mb-0">
+                        <div><strong>Client check needed.</strong> Selected client: <strong>{{ selectedClientNameFromPreview || 'Selected client' }}</strong></div>
+                        <div>Quote TO name: <strong>{{ extractedClientName || 'Could not confidently read the TO client from the PDF' }}</strong></div>
+                        <div class="form-check mt-2">
+                          <input type="checkbox" class="form-check-input" id="clientMismatchApproved" [(ngModel)]="clientMismatchApproved" name="clientMismatchApproved" />
+                          <label class="form-check-label" for="clientMismatchApproved">I confirm the selected client is correct for this quote.</label>
+                        </div>
+                      </div>
+                    }
+                  </div>
+                  <div class="row g-3 mb-3">
+                    <div class="col-md-5">
+                      <label class="form-label">Description</label>
+                      <textarea class="form-control" [(ngModel)]="description" name="uploadDescription" rows="2" required></textarea>
+                    </div>
+                    <div class="col-md-2">
+                      <label class="form-label">Amount</label>
+                      <input type="number" class="form-control" [(ngModel)]="quoteAmount" name="uploadQuoteAmount" step="0.01" min="0" />
+                      @if (lineItems.length) {
+                        <span class="form-text">Line subtotal excl. VAT: R{{ quoteTotalFromLines | number:'1.2-2' }}</span>
+                      }
+                    </div>
+                    <div class="col-md-2">
+                      <label class="form-label">Overall discount %</label>
+                      <input type="number" class="form-control" [(ngModel)]="globalDiscountPercent" name="uploadOverallDiscountPercent" step="0.01" min="0" max="100" (ngModelChange)="onUploadOverallDiscountChange()" />
+                    </div>
+                    <div class="col-md-3">
+                      <label class="form-label">Valid until</label>
+                      <input type="date" class="form-control" [(ngModel)]="validUntil" name="uploadValidUntil" />
+                    </div>
+                  </div>
+                  <label class="form-label mb-2">Extracted line items</label>
+                  @if (lineItems.length) {
+                    <app-table [compact]="true">
+                      <thead><tr><th>Type</th><th>Code</th><th>Description</th><th>Stock mapping</th><th>
+                        <div>Add missing</div>
+                        <div class="form-check mb-0">
+                          <input type="checkbox" class="form-check-input" [checked]="allMissingLineItemsSelected" [indeterminate]="someMissingLineItemsSelected && !allMissingLineItemsSelected" [disabled]="!canSelectMissingLineItems" (change)="toggleAllMissingLineItems($any($event.target).checked)" aria-label="Select all missing extracted items" />
+                          <label class="form-check-label small">All</label>
+                        </div>
+                      </th><th>Qty</th><th>Unit price</th><th>Disc %</th><th>Total</th><th></th></tr></thead>
+                      <tbody>
+                        @for (li of lineItems | slice:(lineItemsPage - 1) * lineItemsPageSize : lineItemsPage * lineItemsPageSize; track $index) {
+                          <tr>
+                            <td>
+                              <select class="form-select form-select-sm" [(ngModel)]="li.lineType" name="uploadLineType{{(lineItemsPage - 1) * lineItemsPageSize + $index}}">
+                                <option [ngValue]="'Part'">Part</option>
+                                <option [ngValue]="'Labour'">Non-stock / labour</option>
+                              </select>
+                            </td>
+                            <td><input type="text" class="form-control form-control-sm" [(ngModel)]="li.code" name="uploadCode{{(lineItemsPage - 1) * lineItemsPageSize + $index}}" [readonly]="!li.addMissingItemToSystem || !!li.partId" /></td>
+                            <td><input type="text" class="form-control form-control-sm" [(ngModel)]="li.description" name="uploadDescription{{(lineItemsPage - 1) * lineItemsPageSize + $index}}" [readonly]="!li.addMissingItemToSystem || !!li.partId" /></td>
+                            <td>
+                              @if (li.lineType === 'Part') {
+                                <select class="form-select form-select-sm" [(ngModel)]="li.partId" (ngModelChange)="onPartSelect((lineItemsPage - 1) * lineItemsPageSize + $index, $event)" name="uploadPart{{(lineItemsPage - 1) * lineItemsPageSize + $index}}">
+                                  <option [ngValue]="null">Non-stock / do not deduct stock</option>
+                                  @for (p of partsForLineType('Part'); track p.id) {
+                                    <option [ngValue]="p.id">{{ stockDisplayLabel(p) }}</option>
+                                  }
+                                </select>
+                              } @else {
+                                <span class="text-muted small">No stock deduction</span>
+                              }
+                            </td>
+                            <td>
+                              @if (!li.partId) {
+                                <div class="form-check">
+                                  <input type="checkbox" class="form-check-input" [(ngModel)]="li.addMissingItemToSystem" name="addMissing{{(lineItemsPage - 1) * lineItemsPageSize + $index}}" />
+                                  <label class="form-check-label small">
+                                    Add {{ li.lineType === 'Part' ? 'stock item' : 'non-stock item' }}
+                                  </label>
+                                </div>
+                              } @else {
+                                <span class="text-muted small">Already mapped</span>
+                              }
+                            </td>
+                            <td><input type="number" class="form-control form-control-sm ike-line-qty-input" [(ngModel)]="li.quantity" name="uploadQty{{(lineItemsPage - 1) * lineItemsPageSize + $index}}" step="0.01" min="0" /></td>
+                            <td><input type="number" class="form-control form-control-sm ike-line-price-input" [(ngModel)]="li.unitPrice" name="uploadPrice{{(lineItemsPage - 1) * lineItemsPageSize + $index}}" step="0.01" min="0" /></td>
+                            <td><input type="number" class="form-control form-control-sm ike-line-qty-input" [(ngModel)]="li.discountPercent" name="uploadDiscount{{(lineItemsPage - 1) * lineItemsPageSize + $index}}" step="0.01" min="0" max="100" /></td>
+                            <td class="text-nowrap">R{{ lineDiscountedTotal(li) | number:'1.2-2' }}</td>
+                            <td><button type="button" class="btn btn-link btn-sm text-danger p-0" (click)="removeLineItem((lineItemsPage - 1) * lineItemsPageSize + $index)">Remove</button></td>
+                          </tr>
+                        }
+                      </tbody>
+                    </app-table>
+                    <app-table-pagination [totalCount]="lineItems.length" [page]="lineItemsPage" [pageSize]="lineItemsPageSize" (pageChange)="lineItemsPage = $event" />
+                  } @else {
+                    <p class="small text-muted mb-0">No line items were detected. You can still approve the uploaded quote or add lines manually.</p>
+                  }
+                </div>
+                <div class="modal-footer">
+                  <button type="button" class="btn btn-light border" (click)="closeUploadPreviewDialog()">Keep editing later</button>
+                  <button type="button" class="btn btn-primary" (click)="approveUploadPreview()">Approve quote details</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        }
       </div>
     </div>
   }

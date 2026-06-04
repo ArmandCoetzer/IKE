@@ -5,6 +5,7 @@ import { FormsModule } from '@angular/forms';
 import { ServiceRequestsService, ServiceRequestDto, UpdateServiceRequestRequest } from '../../../core/services/service-requests.service';
 import { SitesService, SiteDto } from '../../../core/services/sites.service';
 import { PageHeaderComponent } from '../../../shared/page-header/page-header.component';
+import { ToastService } from '../../../core/services/toast.service';
 
 @Component({
   selector: 'app-service-request-edit',
@@ -31,7 +32,8 @@ export class ServiceRequestEditComponent implements OnInit {
     private route: ActivatedRoute,
     private router: Router,
     private serviceRequestsService: ServiceRequestsService,
-    private sitesService: SitesService
+    private sitesService: SitesService,
+    private toast: ToastService
   ) {}
 
   ngOnInit(): void {
@@ -47,13 +49,7 @@ export class ServiceRequestEditComponent implements OnInit {
     });
     this.serviceRequestsService.get(this.id).subscribe({
       next: (sr) => {
-        this.item = sr;
-        this.siteId = sr.siteId;
-        this.description = sr.description ?? '';
-        this.priority = sr.priority ?? 1;
-        this.optionalDueDate = sr.optionalDueDate ? sr.optionalDueDate.toString().slice(0, 10) : '';
-        this.penaltyFee = sr.penaltyFee ?? null;
-        this.penaltyNote = sr.penaltyNote ?? '';
+        this.applyServiceRequest(sr);
         this.loading = false;
       },
       error: () => {
@@ -61,6 +57,16 @@ export class ServiceRequestEditComponent implements OnInit {
         this.loading = false;
       }
     });
+  }
+
+  private applyServiceRequest(sr: ServiceRequestDto): void {
+    this.item = sr;
+    this.siteId = sr.siteId;
+    this.description = sr.description ?? '';
+    this.priority = sr.priority ?? 1;
+    this.optionalDueDate = sr.optionalDueDate ? sr.optionalDueDate.toString().slice(0, 10) : '';
+    this.penaltyFee = sr.penaltyFee ?? null;
+    this.penaltyNote = sr.penaltyNote ?? '';
   }
 
   save(): void {
@@ -80,10 +86,15 @@ export class ServiceRequestEditComponent implements OnInit {
       penaltyNote: this.penaltyNote.trim() || null
     };
     this.serviceRequestsService.update(this.id, body).subscribe({
-      next: () => this.router.navigate(['/service-requests', this.id]),
+      next: (request) => {
+        this.submitting = false;
+        this.applyServiceRequest(request);
+        this.toast.success('Request updated.');
+      },
       error: (err) => {
         this.submitting = false;
         this.error = err.error?.message || 'Failed to update request.';
+        this.toast.error(this.error!);
       }
     });
   }

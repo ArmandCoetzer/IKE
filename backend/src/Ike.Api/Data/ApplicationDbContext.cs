@@ -403,6 +403,10 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             e.Property(i => i.Currency).HasMaxLength(8);
             e.Property(i => i.Status).HasMaxLength(32);
             e.Property(i => i.Notes).HasMaxLength(2000);
+            e.Property(i => i.UploadedFilePath).HasMaxLength(512);
+            e.Property(i => i.UploadedFileName).HasMaxLength(256);
+            e.Property(i => i.UploadedContentType).HasMaxLength(128);
+            e.Property(i => i.ExtractedInvoiceNumber).HasMaxLength(128);
             e.Property(i => i.ReminderStage).HasDefaultValue(0);
             e.HasOne(i => i.JobCard).WithMany().HasForeignKey(i => i.JobCardId);
             e.HasOne(i => i.Quote).WithMany().HasForeignKey(i => i.QuoteId).OnDelete(DeleteBehavior.SetNull);

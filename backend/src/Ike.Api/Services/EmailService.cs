@@ -219,6 +219,43 @@ public class EmailService : IEmailService
         }
     }
 
+    private async Task<(byte[] bytes, string fileName)?> LoadUploadedInvoiceAttachmentAsync(Invoice invoice, CancellationToken ct)
+    {
+        var safePath = FilePathHelper.ValidateAndNormalize(invoice.UploadedFilePath);
+        if (safePath == null)
+        {
+            _logger.LogWarning("Uploaded invoice email not sent: stored file path is missing or invalid for invoice {InvoiceId}.", invoice.Id);
+            return null;
+        }
+
+        var fullPath = Path.Combine(_env.ContentRootPath, safePath.Replace('/', Path.DirectorySeparatorChar));
+        if (!File.Exists(fullPath))
+        {
+            _logger.LogWarning("Uploaded invoice email not sent: uploaded file missing for invoice {InvoiceId}. RelativePath={RelativePath}", invoice.Id, safePath);
+            return null;
+        }
+
+        try
+        {
+            var bytes = await File.ReadAllBytesAsync(fullPath, ct);
+            if (bytes.Length == 0)
+            {
+                _logger.LogWarning("Uploaded invoice email not sent: uploaded file is empty for invoice {InvoiceId}. RelativePath={RelativePath}", invoice.Id, safePath);
+                return null;
+            }
+
+            var fileName = string.IsNullOrWhiteSpace(invoice.UploadedFileName)
+                ? Path.GetFileName(safePath)
+                : invoice.UploadedFileName.Trim();
+            return (bytes, fileName);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _logger.LogWarning(ex, "Uploaded invoice email not sent: uploaded file could not be read for invoice {InvoiceId}. RelativePath={RelativePath}", invoice.Id, safePath);
+            return null;
+        }
+    }
+
     public async Task<bool> SendInvoiceToClientAsync(Guid invoiceId, string? toEmail = null, bool attachPdf = false, CancellationToken ct = default)
     {
         var invoice = await _db.Invoices.AsNoTracking().Include(i => i.Company).FirstOrDefaultAsync(i => i.Id == invoiceId, ct);
@@ -231,8 +268,19 @@ public class EmailService : IEmailService
         string? attachmentName = null;
         if (attachPdf)
         {
-            attachmentBytes = await _documentService.GetInvoicePdfAsync(invoiceId, ct);
-            attachmentName = $"Invoice-{invoice.InvoiceNumber}.pdf";
+            if (invoice.IsUploaded)
+            {
+                var uploaded = await LoadUploadedInvoiceAttachmentAsync(invoice, ct);
+                if (uploaded == null)
+                    return false;
+                attachmentBytes = uploaded.Value.bytes;
+                attachmentName = uploaded.Value.fileName;
+            }
+            else
+            {
+                attachmentBytes = await _documentService.GetInvoicePdfAsync(invoiceId, ct);
+                attachmentName = $"Invoice-{invoice.InvoiceNumber}.pdf";
+            }
         }
         return await SendAsync(
             to,
@@ -255,8 +303,19 @@ public class EmailService : IEmailService
         string? attachmentName = null;
         if (attachPdf)
         {
-            attachmentBytes = await _documentService.GetInvoicePdfAsync(invoiceId, ct);
-            attachmentName = $"Invoice-{invoice.InvoiceNumber}.pdf";
+            if (invoice.IsUploaded)
+            {
+                var uploaded = await LoadUploadedInvoiceAttachmentAsync(invoice, ct);
+                if (uploaded == null)
+                    return;
+                attachmentBytes = uploaded.Value.bytes;
+                attachmentName = uploaded.Value.fileName;
+            }
+            else
+            {
+                attachmentBytes = await _documentService.GetInvoicePdfAsync(invoiceId, ct);
+                attachmentName = $"Invoice-{invoice.InvoiceNumber}.pdf";
+            }
         }
         var body = "This is a friendly reminder that the invoice below remains outstanding. Please arrange payment at your earliest convenience.";
         await SendAsync(to, $"Payment reminder: Invoice {invoice.InvoiceNumber}", body, attachmentBytes, attachmentName, ct);
