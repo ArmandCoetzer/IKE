@@ -1,6 +1,7 @@
 <div class="container-fluid">
   <app-page-header title="Clients">
     @if (auth.hasPermission('EditClients')) {
+      <button type="button" class="btn btn-outline-primary me-2" (click)="openImportDialog()">Import clients</button>
       <a routerLink="/clients/new" class="btn btn-primary">Add client</a>
     }
   </app-page-header>
@@ -51,3 +52,90 @@
     <app-table-pagination [totalCount]="filtered.length" [page]="page" [pageSize]="pageSize" (pageChange)="page = $event" />
   }
 </div>
+
+@if (importOpen) {
+  <div class="modal d-block" tabindex="-1" role="dialog" style="background: rgba(0,0,0,.5)">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable" role="document">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Import clients</h5>
+          <button type="button" class="btn-close" aria-label="Close" (click)="closeImportDialog()" [disabled]="importBusy"></button>
+        </div>
+        <div class="modal-body">
+          @if (importError) {
+            <div class="alert alert-danger">{{ importError }}</div>
+          }
+          <div class="d-flex gap-2 align-items-center mb-3">
+            <span class="badge" [class.text-bg-primary]="importStep === 'select'" [class.text-bg-secondary]="importStep !== 'select'">1. Select file</span>
+            <span class="badge" [class.text-bg-primary]="importStep === 'review'" [class.text-bg-secondary]="importStep !== 'review'">2. Review and upload</span>
+          </div>
+          @if (importStep === 'select') {
+            <p class="text-muted small">Use the template so the required columns match exactly. Repeat the client details on multiple rows when a client has more than one site.</p>
+            <button type="button" class="btn btn-outline-secondary btn-sm mb-3" (click)="downloadImportTemplate()">Download Excel template</button>
+            <input type="file" class="form-control" accept=".xlsx" (change)="onImportFileSelected($event)" [disabled]="importBusy" />
+            @if (importBusy) {
+              <p class="small text-muted mt-2 mb-0">Reading file...</p>
+            }
+          } @else {
+            <div class="d-flex justify-content-between align-items-center gap-2 flex-wrap mb-2">
+              <p class="text-muted small mb-0">Click a row to edit it. Rows with errors can be fixed here and uploaded again.</p>
+              <div class="d-flex gap-2">
+                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="downloadFailedImportRows()" [disabled]="importRows.length === 0">Download rows</button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="importStep = 'select'" [disabled]="importBusy">Choose another file</button>
+              </div>
+            </div>
+            <app-table [compact]="true">
+              <thead>
+                <tr>
+                  <th>Row</th>
+                  <th>Company</th>
+                  <th>Contact</th>
+                  <th>Phone</th>
+                  <th>Email</th>
+                  <th>Site</th>
+                  <th>Site address</th>
+                  <th>Errors</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (row of importRows; track row.rowNumber) {
+                  <tr [class.table-danger]="row.errors.length">
+                    <td>{{ row.rowNumber }}</td>
+                    @if (editingImportRow === row.rowNumber) {
+                      <td><input class="form-control form-control-sm" [(ngModel)]="row.companyName" name="clientImportCompany{{row.rowNumber}}" /></td>
+                      <td><input class="form-control form-control-sm" [(ngModel)]="row.contactName" name="clientImportContact{{row.rowNumber}}" /></td>
+                      <td><input class="form-control form-control-sm" [(ngModel)]="row.phone" name="clientImportPhone{{row.rowNumber}}" /></td>
+                      <td><input class="form-control form-control-sm" [(ngModel)]="row.email" name="clientImportEmail{{row.rowNumber}}" /></td>
+                      <td><input class="form-control form-control-sm" [(ngModel)]="row.siteName" name="clientImportSite{{row.rowNumber}}" /></td>
+                      <td><input class="form-control form-control-sm" [(ngModel)]="row.siteAddress" name="clientImportSiteAddress{{row.rowNumber}}" /></td>
+                      <td class="small text-danger">{{ row.errors.join('; ') || '—' }}</td>
+                      <td><button type="button" class="btn btn-sm btn-outline-primary" (click)="stopEditImportRow()">Done</button></td>
+                    } @else {
+                      <td>{{ row.companyName || '—' }}</td>
+                      <td>{{ row.contactName || '—' }}</td>
+                      <td>{{ row.phone || '—' }}</td>
+                      <td>{{ row.email || '—' }}</td>
+                      <td>{{ row.siteName || '—' }}</td>
+                      <td>{{ row.siteAddress || '—' }}</td>
+                      <td class="small text-danger">{{ row.errors.join('; ') || '—' }}</td>
+                      <td><button type="button" class="btn btn-sm btn-outline-secondary" (click)="startEditImportRow(row)">Edit</button></td>
+                    }
+                  </tr>
+                }
+              </tbody>
+            </app-table>
+          }
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-light border" (click)="closeImportDialog()" [disabled]="importBusy">Close</button>
+          @if (importStep === 'review') {
+            <button type="button" class="btn btn-primary" (click)="commitImportRows()" [disabled]="importBusy || importRows.length === 0">
+              {{ importBusy ? 'Uploading...' : 'Upload clients' }}
+            </button>
+          }
+        </div>
+      </div>
+    </div>
+  </div>
+}

@@ -5,11 +5,13 @@ namespace Ike.Api.DTOs.Invoices;
 public class InvoiceLineItemDto
 {
     public string LineType { get; set; } = "Labour";
+    public string? Code { get; set; }
     public string Description { get; set; } = string.Empty;
     public decimal Quantity { get; set; }
     public decimal UnitPrice { get; set; }
     public decimal DiscountPercent { get; set; }
     public Guid? PartId { get; set; }
+    public bool AddMissingItemToSystem { get; set; }
 }
 
 public class CreateInvoiceRequest
@@ -46,9 +48,49 @@ public class UploadInvoiceRequest
     public Guid? QuoteId { get; set; }
     public Guid? ClientId { get; set; }
     public Guid SiteId { get; set; }
+    public decimal? Amount { get; set; }
     public DateTime? DueDate { get; set; }
     public string? Notes { get; set; }
+    public string? LineItemsJson { get; set; }
     public IFormFile? File { get; set; }
+}
+
+public class InvoiceUploadPreviewRequest
+{
+    public Guid JobCardId { get; set; }
+    public Guid? ClientId { get; set; }
+    public Guid SiteId { get; set; }
+    public IFormFile? File { get; set; }
+}
+
+public class InvoiceUploadPreviewDto
+{
+    public string UploadedFileName { get; set; } = string.Empty;
+    public string? ExtractedInvoiceNumber { get; set; }
+    public string? ExtractedSourceCompanyName { get; set; }
+    public string? ExtractedClientName { get; set; }
+    public string SelectedClientName { get; set; } = string.Empty;
+    public bool ClientNameMatchesSelected { get; set; }
+    public string? ExtractedText { get; set; }
+    public decimal? ExtractedAmount { get; set; }
+    public DateTime? DueDate { get; set; }
+    public List<InvoiceUploadPreviewLineDto> LineItems { get; set; } = new();
+}
+
+public class InvoiceUploadPreviewLineDto
+{
+    public string LineType { get; set; } = "Part";
+    public string Code { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public decimal Quantity { get; set; }
+    public decimal UnitPrice { get; set; }
+    public decimal DiscountPercent { get; set; }
+    public decimal VatPercent { get; set; }
+    public decimal ExclTotal { get; set; }
+    public decimal InclTotal { get; set; }
+    public Guid? SuggestedPartId { get; set; }
+    public string? SuggestedPartName { get; set; }
+    public string MatchStatus { get; set; } = "Unmatched";
 }
 
 public class SetPaymentPromiseRequest

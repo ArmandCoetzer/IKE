@@ -7,7 +7,7 @@ import { SitesService, SiteDto } from '../../core/services/sites.service';
 import { QuotesService, CreateQuoteRequest, QuoteDto, QuoteLineItemInput } from '../../core/services/quotes.service';
 import { ServiceRequestsService, ServiceRequestDto } from '../../core/services/service-requests.service';
 import { PurchaseOrdersService, CreatePurchaseOrderRequest } from '../../core/services/purchase-orders.service';
-import { JobCardsService, CreateJobCardRequest } from '../../core/services/job-cards.service';
+import { JobCardsService, CreateJobCardRequest, PlannedPartRequest, UpdateJobCardRequest } from '../../core/services/job-cards.service';
 import { PartsService, PartDto } from '../../core/services/parts.service';
 import { PermitTypesService, PermitTypeDto } from '../../core/services/permit-types.service';
 import { JobCardWorkService } from '../../core/services/job-card-work.service';
@@ -18,16 +18,21 @@ import { TablePaginationComponent } from '../../shared/table-pagination/table-pa
 type StartType = 'quote' | 'request' | 'existingQuote';
 type QuoteInputMode = 'materials' | 'guestimation';
 type ExistingQuoteMode = 'select' | 'upload';
+type QuoteDiscountMode = 'None' | 'Global' | 'PerItem' | 'PerItemAndGlobal';
 type POSource = 'client' | 'us' | 'later';
 
 interface QuoteLineRow {
   lineType: string;
+  code?: string;
   description: string;
+  partName?: string;
   unit?: string;
   quantity: number;
   unitPrice: number;
   discountPercent: number;
   partId?: string;
+  matchStatus?: string;
+  addMissingItemToSystem?: boolean;
 }
 
 interface PlannedStockRow {
@@ -65,7 +70,7 @@ export class StartNewJobComponent implements OnInit {
   selectedRequestId: string | null = null;
   quoteAmount: number | null = null;
   quoteDeferPricing = false;
-  quoteDiscountMode: 'None' | 'Global' | 'PerItem' = 'None';
+  quoteDiscountMode: QuoteDiscountMode = 'None';
   quoteGlobalDiscountPercent = 0;
   quoteDescription = '';
   quoteValidUntil = '';
@@ -75,6 +80,17 @@ export class StartNewJobComponent implements OnInit {
   selectedExistingQuoteId: string | null = null;
   existingQuoteMode: ExistingQuoteMode = 'select';
   existingQuoteUploadFile: File | null = null;
+  existingQuoteUploadPreviewLoading = false;
+  existingQuoteUploadPreviewReady = false;
+  existingQuoteUploadPreviewDialogOpen = false;
+  existingQuoteUploadPreviewApproved = false;
+  extractedQuoteNumber: string | null = null;
+  extractedSupplierName: string | null = null;
+  extractedSourceCompanyName: string | null = null;
+  extractedClientName: string | null = null;
+  selectedClientNameFromPreview: string | null = null;
+  clientNameMatchesSelected = true;
+  clientMismatchApproved = false;
   private existingQuotesRequestKey = '';
   quoteLineItems: QuoteLineRow[] = [];
   quoteLineItemsPage = 1;
@@ -219,6 +235,9 @@ export class StartNewJobComponent implements OnInit {
     this.existingQuotes = [];
     this.selectedExistingQuoteId = null;
     this.quoteAmount = null;
+    if (this.startType === 'existingQuote') {
+      this.clearExistingQuoteUploadPreview();
+    }
     this.clearPlannedStockItems();
     if (this.clientId) {
       this.loadSitesForClient(this.clientId);
@@ -323,17 +342,95 @@ export class StartNewJobComponent implements OnInit {
     return this.startType !== 'quote' || this.quoteInputMode === 'guestimation';
   }
 
+  get isExistingQuoteUploadMode(): boolean {
+    return this.startType === 'existingQuote' && this.existingQuoteMode === 'upload';
+  }
+
   get stockPartsForPlanning(): PartDto[] {
     return this.quoteParts.filter(p => !p.isLabour);
   }
 
   get availableStockPartsForPlanning(): PartDto[] {
-    const selected = new Set(this.plannedStockItems.map(p => p.partId));
+    const selected = new Set([
+      ...this.quoteStockItemsForJob.map(p => p.partId),
+      ...this.plannedStockItems.map(p => p.partId)
+    ]);
     return this.stockPartsForPlanning.filter(p => !selected.has(p.id));
   }
 
   get plannedStockInsufficient(): PlannedStockRow[] {
-    return this.plannedStockItems.filter(p => p.quantity > p.stockQuantity);
+    return [...this.quoteStockItemsForJob, ...this.plannedStockItems].filter(p => p.quantity > p.stockQuantity);
+  }
+
+  get jobStockItemCount(): number {
+    return this.quoteStockItemsForJob.length + this.plannedStockItems.length;
+  }
+
+  get quoteStockItemsForJob(): PlannedStockRow[] {
+    return this.quoteLineItems
+      .filter(li => li.lineType?.toLowerCase() === 'part' && !!li.partId && li.quantity > 0)
+      .map(li => {
+        const part = this.quoteParts.find(p => p.id === li.partId);
+        return {
+          partId: li.partId!,
+          partName: part?.name || li.partName || li.description || 'Stock item',
+          quantity: Math.max(1, Math.ceil(Number(li.quantity) || 1)),
+          stockQuantity: part ? this.guaranteedStockQuantity(part) : 0,
+          unit: part?.unit || li.unit
+        };
+      });
+  }
+
+  private validateMissingQuoteItemsForApproval(): string | null {
+    const addMissingLines = this.quoteLineItems.filter(li => !!li.addMissingItemToSystem && !li.partId);
+    for (const li of addMissingLines) {
+      if (!li.code?.trim()) return 'Each item selected to be added to the system needs a code.';
+      if (!li.description?.trim()) return 'Each item selected to be added to the system needs a description/name.';
+    }
+    const seenCodes = new Set<string>();
+    const seenDescriptions = new Set<string>();
+    for (const li of addMissingLines) {
+      const code = li.code!.trim().toLowerCase();
+      if (seenCodes.has(code)) return `Duplicate item code "${li.code!.trim()}" cannot be added more than once.`;
+      seenCodes.add(code);
+
+      const description = this.normalizeMissingItemKey(li.description);
+      if (seenDescriptions.has(description)) return `Duplicate item description "${li.description.trim()}" cannot be added more than once.`;
+      seenDescriptions.add(description);
+    }
+    return null;
+  }
+
+  get canSelectMissingQuoteLineItems(): boolean {
+    return this.quoteLineItems.some(li => !li.partId);
+  }
+
+  get allMissingQuoteLineItemsSelected(): boolean {
+    const rows = this.quoteLineItems.filter(li => !li.partId);
+    return rows.length > 0 && rows.every(li => !!li.addMissingItemToSystem);
+  }
+
+  get someMissingQuoteLineItemsSelected(): boolean {
+    return this.quoteLineItems.some(li => !li.partId && !!li.addMissingItemToSystem);
+  }
+
+  toggleAllMissingQuoteLineItems(checked: boolean): void {
+    this.quoteLineItems = this.quoteLineItems.map(li => li.partId ? li : { ...li, addMissingItemToSystem: checked });
+    this.existingQuoteUploadPreviewApproved = false;
+  }
+
+  private normalizeMissingItemKey(value: string): string {
+    return value.trim().replace(/\s+/g, ' ').toLowerCase();
+  }
+
+  private quotePlannedPartQuantities(): Map<string, number> {
+    const byPart = new Map<string, number>();
+    for (const li of this.quoteLineItems) {
+      if (li.lineType?.toLowerCase() !== 'part' || !li.partId || li.quantity <= 0) continue;
+      const qty = Math.max(1, Math.ceil(Number(li.quantity) || 1));
+      byPart.set(li.partId, (byPart.get(li.partId) ?? 0) + qty);
+    }
+    return byPart;
   }
 
   get selectedPlannedStockUnit(): string {
@@ -406,24 +503,32 @@ export class StartNewJobComponent implements OnInit {
     if (partId) {
       const part = this.quoteParts.find(p => p.id === partId);
       if (part) {
-        row.description = part.description?.trim() || '';
+        if (!this.isExistingQuoteUploadMode || !row.description.trim()) {
+          row.description = part.description?.trim() || part.name;
+        }
+        row.partName = part.name;
         row.unit = part.unit?.trim() || '';
         if (part.unitPrice != null) row.unitPrice = part.unitPrice;
+        row.matchStatus = 'Mapped';
+        row.addMissingItemToSystem = false;
       }
-    } else {
+    } else if (!this.isExistingQuoteUploadMode) {
       row.description = '';
+      row.partName = undefined;
       row.unit = '';
+    } else {
+      row.matchStatus = 'Manual';
     }
   }
 
   get quoteTotalFromLines(): number {
     const valid = this.quoteLineItems.filter(li => li.quantity > 0 && li.unitPrice >= 0);
     const subtotal = valid.reduce((s, li) => s + li.quantity * li.unitPrice, 0);
-    const perItemDiscount = this.quoteDiscountMode === 'PerItem'
+    const perItemDiscount = (this.quoteDiscountMode === 'PerItem' || this.quoteDiscountMode === 'PerItemAndGlobal' || this.isExistingQuoteUploadMode)
       ? valid.reduce((s, li) => s + ((li.quantity * li.unitPrice) * this.clampPercent(li.discountPercent) / 100), 0)
       : 0;
     const afterPerItem = subtotal - perItemDiscount;
-    const globalDiscount = this.quoteDiscountMode === 'Global'
+    const globalDiscount = (this.quoteDiscountMode === 'Global' || this.quoteDiscountMode === 'PerItemAndGlobal' || (this.isExistingQuoteUploadMode && this.clampPercent(this.quoteGlobalDiscountPercent) > 0))
       ? afterPerItem * this.clampPercent(this.quoteGlobalDiscountPercent) / 100
       : 0;
     return Math.max(0, afterPerItem - globalDiscount);
@@ -440,7 +545,7 @@ export class StartNewJobComponent implements OnInit {
   }
 
   get showPerItemDiscountColumn(): boolean {
-    return this.quoteDiscountMode === 'PerItem';
+    return this.quoteDiscountMode === 'PerItem' || this.quoteDiscountMode === 'PerItemAndGlobal';
   }
 
   quoteLineSubtotal(li: QuoteLineRow): number {
@@ -448,7 +553,7 @@ export class StartNewJobComponent implements OnInit {
   }
 
   quoteLineDiscountAmount(li: QuoteLineRow): number {
-    if (this.quoteDiscountMode !== 'PerItem') return 0;
+    if (this.quoteDiscountMode !== 'PerItem' && this.quoteDiscountMode !== 'PerItemAndGlobal' && !this.isExistingQuoteUploadMode) return 0;
     return this.quoteLineSubtotal(li) * this.clampPercent(li.discountPercent) / 100;
   }
 
@@ -463,6 +568,9 @@ export class StartNewJobComponent implements OnInit {
   }
 
   get effectiveQuoteAmount(): number {
+    if (this.isExistingQuoteUploadMode) {
+      return this.quoteAmount ?? this.quoteTotalFromLines;
+    }
     if (this.quoteInputMode === 'materials') {
       const fromLines = this.quoteLineItems.filter(li => li.quantity > 0 && li.unitPrice >= 0);
       if (fromLines.length > 0) {
@@ -499,6 +607,20 @@ export class StartNewJobComponent implements OnInit {
     if (this.quoteInputMode !== 'materials' && mode === 'PerItem') {
       this.quoteDiscountMode = 'None';
     }
+  }
+
+  onExistingQuoteUploadDiscountChange(): void {
+    if (!this.isExistingQuoteUploadMode) return;
+    const hasLineDiscounts = this.quoteLineItems.some(li => this.clampPercent(li.discountPercent) > 0);
+    const hasGlobalDiscount = this.clampPercent(this.quoteGlobalDiscountPercent) > 0;
+    this.quoteDiscountMode = hasLineDiscounts && hasGlobalDiscount
+      ? 'PerItemAndGlobal'
+      : hasLineDiscounts
+        ? 'PerItem'
+        : hasGlobalDiscount
+          ? 'Global'
+          : 'None';
+    this.existingQuoteUploadPreviewApproved = false;
   }
 
   nextFromStep1(): void {
@@ -574,6 +696,10 @@ export class StartNewJobComponent implements OnInit {
         this.error = 'Select a quote file to upload.';
         return;
       }
+      if (this.existingQuoteMode === 'upload' && !this.existingQuoteUploadPreviewApproved) {
+        this.error = 'Review and approve the extracted quote details before continuing.';
+        return;
+      }
       const selected = this.existingQuotes.find(q => q.id === this.selectedExistingQuoteId);
       if (this.existingQuoteMode === 'select') {
         if (!selected) {
@@ -594,15 +720,32 @@ export class StartNewJobComponent implements OnInit {
         next: (job) => {
           this.createdJobCardId = job.id;
           if (this.existingQuoteMode === 'upload') {
+            const validUploadLines = this.quoteLineItems.filter(li => li.quantity > 0 && li.unitPrice >= 0 && li.description.trim());
             this.quotesService.upload({
               clientId: this.clientId!,
               siteId: this.siteId!,
               jobCardId: job.id,
+              amount: this.quoteAmount ?? (validUploadLines.length > 0 ? this.quoteTotalFromLines : 0),
+              globalDiscountPercent: this.clampPercent(this.quoteGlobalDiscountPercent),
+              description: this.quoteDescription.trim(),
+              notes: this.quoteNotes.trim() || undefined,
+              validUntil: this.quoteValidUntil || undefined,
+              lineItems: validUploadLines.map(li => ({
+                lineType: li.lineType,
+                code: li.code?.trim() || undefined,
+                description: li.description.trim(),
+                quantity: li.quantity,
+                unitPrice: li.unitPrice,
+                discountPercent: this.clampPercent(li.discountPercent),
+                partId: li.partId,
+                addMissingItemToSystem: !!li.addMissingItemToSystem
+              })),
               file: this.existingQuoteUploadFile!
             }).subscribe({
               next: (quote) => {
                 this.createdQuoteId = quote.id;
                 this.quoteAmount = quote.amount;
+                this.applySavedQuoteLineItems(quote);
                 this.submitting = false;
                 this.step = 4;
                 this.updateUrl();
@@ -618,6 +761,7 @@ export class StartNewJobComponent implements OnInit {
           this.quotesService.linkToJobCard(this.selectedExistingQuoteId!, job.id).subscribe({
             next: (quote) => {
               this.quoteAmount = quote.amount;
+              this.applySavedQuoteLineItems(quote);
               this.submitting = false;
               this.step = 4;
               this.updateUrl();
@@ -673,6 +817,7 @@ export class StartNewJobComponent implements OnInit {
   onQuoteClientOrSiteChange(siteId: string | null = this.siteId): void {
     this.siteId = siteId;
     if (this.startType === 'existingQuote') {
+      this.clearExistingQuoteUploadPreview();
       if (this.clientId && this.siteId) {
         this.loadExistingQuotes();
         this.loadQuoteParts();
@@ -709,7 +854,8 @@ export class StartNewJobComponent implements OnInit {
       if (selected) this.quoteAmount = selected.amount;
       this.submitting = true;
       this.quotesService.linkToJobCard(this.selectedExistingQuoteId, this.createdJobCardId).subscribe({
-        next: () => {
+        next: (quote) => {
+          this.applySavedQuoteLineItems(quote);
           this.submitting = false;
           this.step = 4;
           this.updateUrl();
@@ -758,20 +904,170 @@ export class StartNewJobComponent implements OnInit {
     this.quoteAmount = q.amount;
   }
 
+  private applySavedQuoteLineItems(quote: QuoteDto): void {
+    const savedLines = quote.lineItems ?? [];
+    if (!savedLines.length) return;
+    this.quoteLineItems = savedLines.map(li => ({
+      lineType: li.lineType || 'Labour',
+      description: li.description || '',
+      partName: li.partName,
+      unit: '',
+      quantity: li.quantity || 1,
+      unitPrice: li.unitPrice || 0,
+      discountPercent: li.discountPercent || 0,
+      partId: li.partId
+    }));
+    this.quoteLineItemsPage = 1;
+  }
+
+  private quoteDerivedPlannedParts(): PlannedPartRequest[] {
+    const byPart = this.quotePlannedPartQuantities();
+    return Array.from(byPart.entries()).map(([partId, quantity]) => ({ partId, quantity }));
+  }
+
+  private combinePlannedParts(quoteParts: PlannedPartRequest[], manualParts: PlannedPartRequest[]): PlannedPartRequest[] {
+    const byPart = new Map<string, number>();
+    for (const pp of [...quoteParts, ...manualParts]) {
+      if (!pp.partId || pp.quantity < 1) continue;
+      byPart.set(pp.partId, (byPart.get(pp.partId) ?? 0) + pp.quantity);
+    }
+    return Array.from(byPart.entries()).map(([partId, quantity]) => ({ partId, quantity }));
+  }
+
   onExistingQuoteModeChange(mode: ExistingQuoteMode): void {
     this.existingQuoteMode = mode;
     this.error = null;
     if (mode === 'select') {
-      this.existingQuoteUploadFile = null;
+      this.clearExistingQuoteUploadPreview();
     } else {
       this.selectedExistingQuoteId = null;
       this.quoteAmount = null;
+      this.clearExistingQuoteUploadPreview(false);
     }
   }
 
   onExistingQuoteUploadSelected(event: Event): void {
     const input = event.target as HTMLInputElement;
+    if (!this.clientId || !this.siteId) {
+      input.value = '';
+      this.existingQuoteUploadFile = null;
+      this.toast.error('Select client and site before uploading a quote.');
+      return;
+    }
     this.existingQuoteUploadFile = input.files?.[0] ?? null;
+    this.clearExistingQuoteUploadPreview(false);
+    if (this.existingQuoteUploadFile) {
+      this.previewExistingUploadedQuote();
+    }
+  }
+
+  clearExistingQuoteUploadPreview(clearFile = true): void {
+    if (clearFile) this.existingQuoteUploadFile = null;
+    this.existingQuoteUploadPreviewLoading = false;
+    this.existingQuoteUploadPreviewReady = false;
+    this.existingQuoteUploadPreviewDialogOpen = false;
+    this.existingQuoteUploadPreviewApproved = false;
+    this.extractedQuoteNumber = null;
+    this.extractedSupplierName = null;
+    this.extractedSourceCompanyName = null;
+    this.extractedClientName = null;
+    this.selectedClientNameFromPreview = null;
+    this.clientNameMatchesSelected = true;
+    this.clientMismatchApproved = false;
+    this.quoteAmount = null;
+    this.quoteGlobalDiscountPercent = 0;
+    this.quoteDiscountMode = 'None';
+    this.quoteLineItems = [];
+    this.quoteLineItemsPage = 1;
+  }
+
+  previewExistingUploadedQuote(): void {
+    this.error = null;
+    if (!this.existingQuoteUploadFile) return;
+    if (!this.clientId || !this.siteId) {
+      this.toast.error('Select client and site before uploading a quote.');
+      return;
+    }
+    this.existingQuoteUploadPreviewLoading = true;
+    this.quotesService.uploadPreview({
+      clientId: this.clientId,
+      siteId: this.siteId,
+      file: this.existingQuoteUploadFile
+    }).subscribe({
+      next: (preview) => {
+        this.existingQuoteUploadPreviewLoading = false;
+        this.existingQuoteUploadPreviewReady = true;
+        this.existingQuoteUploadPreviewApproved = false;
+        this.existingQuoteUploadPreviewDialogOpen = true;
+        this.extractedQuoteNumber = preview.extractedQuoteNumber ?? null;
+        this.extractedSupplierName = preview.extractedSupplierName ?? null;
+        this.extractedSourceCompanyName = preview.extractedSourceCompanyName ?? preview.extractedSupplierName ?? null;
+        this.extractedClientName = preview.extractedClientName ?? null;
+        this.selectedClientNameFromPreview = preview.selectedClientName ?? null;
+        this.clientNameMatchesSelected = preview.clientNameMatchesSelected;
+        this.clientMismatchApproved = false;
+        this.quoteDescription = preview.description || this.quoteDescription;
+        this.quoteAmount = preview.extractedAmount ?? null;
+        this.quoteGlobalDiscountPercent = this.clampPercent(preview.overallDiscountPercent ?? 0);
+        this.quoteValidUntil = preview.validUntil ? preview.validUntil.substring(0, 10) : '';
+        this.quoteLineItems = (preview.lineItems ?? []).map(li => ({
+          lineType: li.lineType || 'Part',
+          code: li.code || '',
+          description: li.description || '',
+          partName: li.suggestedPartName,
+          unit: '',
+          quantity: li.quantity || 1,
+          unitPrice: li.unitPrice || 0,
+          discountPercent: li.discountPercent || 0,
+          partId: li.suggestedPartId,
+          matchStatus: li.matchStatus,
+          addMissingItemToSystem: false
+        }));
+        this.onExistingQuoteUploadDiscountChange();
+        this.toast.success(this.quoteLineItems.length ? 'Quote details extracted for review.' : 'Quote uploaded for review. No line items were detected.');
+      },
+      error: (err) => {
+        this.existingQuoteUploadPreviewLoading = false;
+        const msg = err.error?.message || 'Failed to extract quote details.';
+        this.error = msg;
+        this.toast.error(msg);
+      }
+    });
+  }
+
+  openExistingQuoteUploadPreviewDialog(): void {
+    if (this.existingQuoteUploadPreviewReady) {
+      this.existingQuoteUploadPreviewApproved = false;
+      this.existingQuoteUploadPreviewDialogOpen = true;
+    }
+  }
+
+  closeExistingQuoteUploadPreviewDialog(): void {
+    this.existingQuoteUploadPreviewDialogOpen = false;
+  }
+
+  approveExistingQuoteUploadPreview(): void {
+    if (!this.quoteDescription.trim()) {
+      this.toast.error('Description is required before approving the quote.');
+      return;
+    }
+    if (!this.clientNameMatchesSelected && !this.clientMismatchApproved) {
+      this.toast.error('Confirm that the selected client is correct before approving this quote.');
+      return;
+    }
+    const missingItemError = this.validateMissingQuoteItemsForApproval();
+    if (missingItemError) {
+      this.toast.error(missingItemError);
+      return;
+    }
+    const invalidLine = this.quoteLineItems.some(li => li.quantity <= 0 || li.unitPrice < 0 || !li.description.trim());
+    if (invalidLine) {
+      this.toast.error('Check extracted lines: each saved line needs a description, quantity and valid price.');
+      return;
+    }
+    this.existingQuoteUploadPreviewApproved = true;
+    this.existingQuoteUploadPreviewDialogOpen = false;
+    this.toast.success('Quote details approved.');
   }
 
   private createQuote(serviceRequestId: string | undefined): void {
@@ -832,6 +1128,7 @@ export class StartNewJobComponent implements OnInit {
     this.quotesService.create(body).subscribe({
       next: (quote) => {
         this.createdQuoteId = quote.id;
+        this.applySavedQuoteLineItems(quote);
         this.submitting = false;
         this.step = 4;
         this.updateUrl();
@@ -965,16 +1262,19 @@ export class StartNewJobComponent implements OnInit {
           .filter(p => p.partId && p.quantity > 0)
           .map(p => ({ partId: p.partId, quantity: Math.max(1, Math.round(Number(p.quantity) || 1)) }))
       : [];
-    this.jobCardsService.update(this.createdJobCardId, {
+    const quotePlannedParts = this.quoteDerivedPlannedParts();
+    const plannedPartsForJob = this.combinePlannedParts(quotePlannedParts, manualPlannedParts);
+    const jobUpdate: UpdateJobCardRequest = {
       status: 'Open',
       description: this.jobDescription?.trim() || undefined,
       priority: this.jobPriority,
       dueDate: this.jobDueDate || null,
       permitsRequired: this.permitsRequired,
       requiredPermitTypeId: this.permitsRequired ? workAuthPermitTypeId ?? undefined : null,
-      partsRequired: manualPlannedParts.length > 0,
-      plannedParts: manualPlannedParts
-    }).subscribe({
+      partsRequired: plannedPartsForJob.length > 0 || undefined,
+      plannedParts: plannedPartsForJob.length > 0 ? plannedPartsForJob : undefined
+    };
+    this.jobCardsService.update(this.createdJobCardId, jobUpdate).subscribe({
       next: () => {
         this.sendQuoteToClientThenFinish();
       },
@@ -1028,9 +1328,12 @@ export class StartNewJobComponent implements OnInit {
   }
 
   get stockUsageSummary(): string {
-    if (!this.showOptionalStockUsageSection) return 'From quote line items';
-    if (!this.plannedStockItems.length) return 'No additional stock specified';
-    return this.plannedStockItems.map(p => `${p.partName} × ${p.quantity}`).join(', ');
+    const items = [...this.quoteStockItemsForJob, ...this.plannedStockItems];
+    if (!this.showOptionalStockUsageSection && this.quoteStockItemsForJob.length) {
+      return this.quoteStockItemsForJob.map(p => `${p.partName} × ${p.quantity}`).join(', ');
+    }
+    if (!items.length) return 'No stock specified';
+    return items.map(p => `${p.partName} × ${p.quantity}`).join(', ');
   }
 
   /** Work Authorisation permit type for first permit. */

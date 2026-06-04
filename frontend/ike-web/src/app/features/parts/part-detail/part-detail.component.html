@@ -1,7 +1,7 @@
 <div class="container-fluid">
   <app-page-header [title]="item?.name ?? 'Part'" backLink="/parts">
-    @if (item && item.isLowStock && !item.isLabour && auth.hasPermission('ManagePurchaseOrders')) {
-      @if (canRequestStock()) {
+    @if (item && auth.hasPermission('ManagePurchaseOrders')) {
+      @if (canShowRequestStock()) {
         <a
           class="btn btn-outline-warning btn-sm"
           [routerLink]="['/supplier-quote-requests/new']"
@@ -14,12 +14,13 @@
           }">
           Request stock
         </a>
-      } @else if (!item.isLabour) {
-        <span class="badge bg-danger">Cannot request: supplier email missing</span>
       }
     }
-    @if (item) {
+    @if (item && auth.hasPermission('ManagePurchaseOrders')) {
       <a class="btn btn-sm btn-outline-primary" [routerLink]="['/parts', item.id, 'edit']">Edit</a>
+      <button type="button" class="btn btn-sm btn-outline-danger" (click)="deletePart()" [disabled]="deleting">
+        {{ deleting ? 'Deleting...' : 'Delete' }}
+      </button>
     }
   </app-page-header>
   @if (loading) {
@@ -63,5 +64,40 @@
         </dl>
       </div>
     </div>
+    @if (!item.isLabour) {
+      <div class="card border-0 shadow-sm rounded-3 mt-3">
+        <div class="card-body p-4">
+          <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
+            <div>
+              <h2 class="h6 mb-2">Linked suppliers</h2>
+              @if (linkedSupplierNames().length) {
+                <div class="d-flex flex-wrap gap-2">
+                  @for (supplierName of linkedSupplierNames(); track supplierName) {
+                    <span class="badge text-bg-light border">{{ supplierName }}</span>
+                  }
+                </div>
+              } @else {
+                <p class="text-muted mb-0">No suppliers linked to this part yet.</p>
+              }
+            </div>
+            @if (canRestockFromLinkedSuppliers()) {
+              <a
+                class="btn btn-warning btn-sm"
+                [routerLink]="['/supplier-quote-requests/new']"
+                [queryParams]="{
+                  partId: item.id,
+                  requestedQuantity: stockRequestQuantity(),
+                  notes: 'Low stock request: ' + item.name + ' (have ' + guaranteedQuantity() + ', reorder ' + item.reorderLevel + ')',
+                  returnTo: '/parts/' + item.id
+                }">
+                Restock
+              </a>
+            } @else if (needsPartSetupFix() && auth.hasPermission('ManagePurchaseOrders')) {
+              <a class="btn btn-outline-secondary btn-sm" [routerLink]="['/parts', item.id, 'edit']">Fix item</a>
+            }
+          </div>
+        </div>
+      </div>
+    }
   }
 </div>

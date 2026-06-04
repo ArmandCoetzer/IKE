@@ -44,13 +44,85 @@
               </select>
             </div>
           </div>
-          <div class="border rounded p-3 mb-3 bg-light">
-            <label class="form-label fw-medium">Upload invoice file (optional)</label>
-            <input type="file" class="form-control form-control-sm" accept=".pdf,.png,.jpg,.jpeg,.webp,.txt,.csv" (change)="onUploadedInvoiceSelected($event)" />
-            <p class="form-text mb-0">
-              If uploaded, the system stores the original invoice file, extracts basic details where possible, and still prefills parts from the accepted quote or job stock items for final confirmation.
-            </p>
+          <div class="d-flex justify-content-between align-items-center gap-2 mb-3">
+            <button type="button" class="btn btn-outline-primary btn-sm" [class.active]="invoiceInputMode === 'upload'" (click)="toggleInvoiceInputMode()">
+              {{ invoiceInputMode === 'upload' ? 'Use invoice form instead' : 'Upload invoice document' }}
+            </button>
+            <button type="button" class="btn btn-outline-secondary btn-sm" (click)="addLineItem()">+ Add line items (labour, parts)</button>
           </div>
+
+          @if (invoiceInputMode === 'upload') {
+            <div class="border rounded p-3 mb-3 bg-light">
+              <label class="form-label fw-medium">Upload invoice document</label>
+              <input type="file" class="form-control form-control-sm" accept=".pdf,.png,.jpg,.jpeg,.webp,.txt,.csv" [disabled]="!jobCardId || !siteId || !clientId || uploadPreviewLoading" (change)="onUploadedInvoiceSelected($event)" />
+              @if (!jobCardId || !siteId || !clientId) {
+                <p class="form-text text-warning mb-0">Select a job card, client and site before uploading an invoice document.</p>
+              }
+              @if (uploadedInvoiceFile) {
+                <div class="d-flex align-items-center gap-2 flex-wrap mt-2">
+                  <p class="small mb-0">Selected: <strong>{{ uploadedInvoiceFile.name }}</strong></p>
+                  @if (uploadPreviewApproved) {
+                    <span class="badge bg-success">Approved</span>
+                  } @else if (uploadPreviewReady) {
+                    <span class="badge bg-warning text-dark">Needs approval</span>
+                  }
+                  @if (uploadPreviewReady) {
+                    <button type="button" class="btn btn-outline-secondary btn-sm" (click)="openUploadPreviewDialog()">Review / amend</button>
+                  }
+                </div>
+                @if (uploadPreviewLoading) {
+                  <p class="small text-muted mt-2 mb-0">Extracting invoice details...</p>
+                }
+                @if (uploadPreviewReady) {
+                  <div class="row g-3 mt-2">
+                    <div class="col-md-4">
+                      <div class="small text-muted">Invoice amount</div>
+                      <div class="fw-semibold">
+                        @if (extractedInvoiceAmount != null) {
+                          R{{ extractedInvoiceAmount | number:'1.2-2' }}
+                        } @else if (amount != null) {
+                          R{{ amount | number:'1.2-2' }}
+                        } @else {
+                          Not detected
+                        }
+                      </div>
+                    </div>
+                    <div class="col-md-4">
+                      <div class="small text-muted">Due date</div>
+                      <div class="fw-semibold">{{ dueDate ? (dueDate | date:'mediumDate') : 'Not detected' }}</div>
+                    </div>
+                    <div class="col-md-4">
+                      <div class="small text-muted">Invoice number</div>
+                      <div class="fw-semibold">{{ extractedInvoiceNumber || 'Not detected' }}</div>
+                    </div>
+                  </div>
+                }
+              } @else {
+                <p class="form-text mb-0">
+                  The original document will be stored and attached when sending the invoice. Extraction starts automatically and must be approved before saving.
+                </p>
+              }
+            </div>
+          } @else {
+            <div class="row g-3 mb-3">
+              <div class="col-md-6">
+                <label class="form-label">Amount</label>
+                <input type="number" class="form-control" [(ngModel)]="amount" name="amount" step="0.01" min="0" required [readonly]="lineItems.length > 0" />
+                @if (lineItems.length) {
+                  <span class="form-text">Calculated from line items above</span>
+                }
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">Due date</label>
+                <input type="date" class="form-control" [(ngModel)]="dueDate" name="dueDate" required />
+              </div>
+            </div>
+            <div class="mb-4">
+              <label class="form-label">Notes (optional)</label>
+              <input type="text" class="form-control" [(ngModel)]="notes" name="notes" />
+            </div>
+          }
+
           @if (lineItems.length) {
             <div class="mb-3">
               <div class="d-flex justify-content-between align-items-center mb-2">
@@ -77,7 +149,9 @@
                               }
                             </select>
                           }
-                          <input type="text" class="form-control form-control-sm" [class.mt-1]="partsForLineType(li.lineType).length" [(ngModel)]="li.description" [name]="'desc' + ((lineItemsPage - 1) * lineItemsPageSize + $index)" placeholder="Description" />
+                          @if (!partsForLineType(li.lineType).length) {
+                            <input type="text" class="form-control form-control-sm" [(ngModel)]="li.description" [name]="'desc' + ((lineItemsPage - 1) * lineItemsPageSize + $index)" placeholder="Description" />
+                          }
                         </td>
                         <td><input type="number" class="form-control form-control-sm ike-line-qty-input" [(ngModel)]="li.quantity" [name]="'qty' + ((lineItemsPage - 1) * lineItemsPageSize + $index)" step="0.01" min="0" (ngModelChange)="updateAmountFromLines()" /></td>
                         <td><input type="number" class="form-control form-control-sm ike-line-price-input" [(ngModel)]="li.unitPrice" name="price{{(lineItemsPage - 1) * lineItemsPageSize + $index}}" step="0.01" min="0" (ngModelChange)="updateAmountFromLines()" /></td>
@@ -99,33 +173,139 @@
               }
               <p class="small mb-2"><strong>Total from lines: R{{ totalFromLines | number:'1.2-2' }}</strong></p>
             </div>
-          } @else {
-            <button type="button" class="btn btn-outline-secondary btn-sm mb-3" (click)="addLineItem()">+ Add line items (labour, parts)</button>
           }
-          <div class="row g-3 mb-3">
-            <div class="col-md-6">
-              <label class="form-label">Amount</label>
-              <input type="number" class="form-control" [(ngModel)]="amount" name="amount" step="0.01" min="0" [required]="!uploadedInvoiceFile" [readonly]="lineItems.length > 0 || !!uploadedInvoiceFile" />
-              @if (lineItems.length) {
-                <span class="form-text">Calculated from line items above</span>
-              } @else if (uploadedInvoiceFile) {
-                <span class="form-text">Extracted from the uploaded invoice where possible.</span>
-              }
-            </div>
-            <div class="col-md-6">
-              <label class="form-label">Due date</label>
-              <input type="date" class="form-control" [(ngModel)]="dueDate" name="dueDate" required />
-            </div>
-          </div>
-          <div class="mb-4">
-            <label class="form-label">Notes (optional)</label>
-            <input type="text" class="form-control" [(ngModel)]="notes" name="notes" />
-          </div>
           <div class="d-flex gap-2">
             <button type="submit" class="btn btn-primary" [disabled]="submitting || invoiceBlockedByUnacceptedQuote">Save</button>
             <a routerLink="/invoices" class="btn btn-light border">Cancel</a>
           </div>
         </form>
+        @if (uploadPreviewDialogOpen) {
+          <div class="modal d-block" tabindex="-1" role="dialog" style="background: rgba(0,0,0,.5)">
+            <div class="modal-dialog modal-xl modal-dialog-scrollable" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h5 class="modal-title">Review extracted invoice</h5>
+                  <button type="button" class="btn-close" aria-label="Close" (click)="closeUploadPreviewDialog()"></button>
+                </div>
+                <div class="modal-body">
+                  <div class="d-flex justify-content-between gap-3 flex-wrap mb-3">
+                    <p class="small text-muted mb-0">Correct anything that was read incorrectly, map stock where possible, then approve these details before saving the invoice.</p>
+                    <div class="small text-muted">
+                      @if (extractedInvoiceNumber) {
+                        <span class="me-3">Original #: {{ extractedInvoiceNumber }}</span>
+                      }
+                      @if (extractedSourceCompanyName) {
+                        <span>From: {{ extractedSourceCompanyName }}</span>
+                      }
+                    </div>
+                  </div>
+                  <div class="mb-3">
+                    @if (clientNameMatchesSelected) {
+                      <div class="alert alert-success py-2 mb-0">
+                        Invoice client matches selected client: <strong>{{ extractedClientName || selectedClientNameFromPreview }}</strong>
+                      </div>
+                    } @else {
+                      <div class="alert alert-warning py-2 mb-0">
+                        <div><strong>Client check needed.</strong> Selected client: <strong>{{ selectedClientNameFromPreview || 'Selected client' }}</strong></div>
+                        <div>Invoice TO name: <strong>{{ extractedClientName || 'Could not confidently read the TO client from the file' }}</strong></div>
+                        <div class="form-check mt-2">
+                          <input type="checkbox" class="form-check-input" id="invoiceClientMismatchApproved" [(ngModel)]="clientMismatchApproved" name="invoiceClientMismatchApproved" />
+                          <label class="form-check-label" for="invoiceClientMismatchApproved">I confirm the selected client is correct for this invoice.</label>
+                        </div>
+                      </div>
+                    }
+                  </div>
+                  @if (invoiceComparisonNotes.length) {
+                    <div class="alert alert-info py-2">
+                      <div class="fw-semibold mb-1">Differences from quote/planned parts</div>
+                      <ul class="mb-0">
+                        @for (note of invoiceComparisonNotes; track note) {
+                          <li>{{ note }}</li>
+                        }
+                      </ul>
+                    </div>
+                  }
+                  <div class="row g-3 mb-3">
+                    <div class="col-md-4">
+                      <label class="form-label">Amount</label>
+                      <div class="form-control-plaintext border rounded px-3 bg-light">R{{ (extractedInvoiceAmount ?? amount ?? 0) | number:'1.2-2' }}</div>
+                      @if (lineItems.length) {
+                        <span class="form-text">Line subtotal excl. VAT: R{{ totalFromLines | number:'1.2-2' }}</span>
+                      }
+                    </div>
+                    <div class="col-md-4">
+                      <label class="form-label">Due date</label>
+                      <div class="form-control-plaintext border rounded px-3 bg-light">{{ dueDate ? (dueDate | date:'mediumDate') : '—' }}</div>
+                    </div>
+                    <div class="col-md-4">
+                      <label class="form-label">Notes</label>
+                      <input type="text" class="form-control" [(ngModel)]="notes" name="uploadInvoiceNotes" />
+                    </div>
+                  </div>
+                  <div class="d-flex justify-content-between align-items-center gap-2 flex-wrap mb-2">
+                    <label class="form-label mb-0">Extracted line items</label>
+                    <button type="button" class="btn btn-outline-secondary btn-sm" (click)="addLineItem()">+ Add line</button>
+                  </div>
+                  @if (lineItems.length) {
+                    <app-table [compact]="true">
+                      <thead><tr><th>Type</th><th>Code</th><th>Description</th><th>Stock mapping</th><th>Add missing</th><th>Qty</th><th>Unit price</th><th>Disc %</th><th>Total</th><th></th></tr></thead>
+                      <tbody>
+                        @for (li of lineItems | slice:(lineItemsPage - 1) * lineItemsPageSize : lineItemsPage * lineItemsPageSize; track $index) {
+                          <tr>
+                            <td>
+                              <select class="form-select form-select-sm" [(ngModel)]="li.lineType" name="uploadInvoiceLineType{{(lineItemsPage - 1) * lineItemsPageSize + $index}}">
+                                <option [ngValue]="'Part'">Part</option>
+                                <option [ngValue]="'Labour'">Non-stock / labour</option>
+                              </select>
+                            </td>
+                            <td><input type="text" class="form-control form-control-sm" [(ngModel)]="li.code" name="uploadInvoiceCode{{(lineItemsPage - 1) * lineItemsPageSize + $index}}" [readonly]="!li.addMissingItemToSystem || !!li.partId" /></td>
+                            <td><input type="text" class="form-control form-control-sm" [(ngModel)]="li.description" name="uploadInvoiceDescription{{(lineItemsPage - 1) * lineItemsPageSize + $index}}" [readonly]="!li.addMissingItemToSystem || !!li.partId" /></td>
+                            <td>
+                              @if (li.lineType === 'Part') {
+                                <select class="form-select form-select-sm" [(ngModel)]="li.partId" (ngModelChange)="onPartSelect((lineItemsPage - 1) * lineItemsPageSize + $index, $event)" name="uploadInvoicePart{{(lineItemsPage - 1) * lineItemsPageSize + $index}}">
+                                  <option [ngValue]="null">Non-stock / do not deduct stock</option>
+                                  @for (p of partsForLineType('Part'); track p.id) {
+                                    <option [ngValue]="p.id">{{ stockDisplayLabel(p) }}</option>
+                                  }
+                                </select>
+                              } @else {
+                                <span class="text-muted small">No stock deduction</span>
+                              }
+                            </td>
+                            <td>
+                              @if (!li.partId) {
+                                <div class="form-check">
+                                  <input type="checkbox" class="form-check-input" [(ngModel)]="li.addMissingItemToSystem" name="uploadInvoiceAddMissing{{(lineItemsPage - 1) * lineItemsPageSize + $index}}" />
+                                  <label class="form-check-label small">
+                                    Add {{ li.lineType === 'Part' ? 'stock item' : 'non-stock item' }}
+                                  </label>
+                                </div>
+                              } @else {
+                                <span class="text-muted small">Already mapped</span>
+                              }
+                            </td>
+                            <td><input type="number" class="form-control form-control-sm ike-line-qty-input" [(ngModel)]="li.quantity" name="uploadInvoiceQty{{(lineItemsPage - 1) * lineItemsPageSize + $index}}" step="0.01" min="0" /></td>
+                            <td><input type="number" class="form-control form-control-sm ike-line-price-input" [(ngModel)]="li.unitPrice" name="uploadInvoicePrice{{(lineItemsPage - 1) * lineItemsPageSize + $index}}" step="0.01" min="0" /></td>
+                            <td><input type="number" class="form-control form-control-sm ike-line-qty-input" [(ngModel)]="li.discountPercent" name="uploadInvoiceDiscount{{(lineItemsPage - 1) * lineItemsPageSize + $index}}" step="0.01" min="0" max="100" /></td>
+                            <td class="text-nowrap">R{{ lineDiscountedTotal(li) | number:'1.2-2' }}</td>
+                            <td><button type="button" class="btn btn-link btn-sm text-danger p-0" (click)="removeLineItem((lineItemsPage - 1) * lineItemsPageSize + $index)">Remove</button></td>
+                          </tr>
+                        }
+                      </tbody>
+                    </app-table>
+                    <app-table-pagination [totalCount]="lineItems.length" [page]="lineItemsPage" [pageSize]="lineItemsPageSize" (pageChange)="lineItemsPage = $event" />
+                  } @else {
+                    <p class="small text-muted mb-0">No line items were detected. You can still approve the uploaded invoice or add lines manually.</p>
+                  }
+                </div>
+                <div class="modal-footer">
+                  <button type="button" class="btn btn-light border" (click)="closeUploadPreviewDialog()">Keep editing later</button>
+                  <button type="button" class="btn btn-primary" (click)="approveUploadPreview()">Approve invoice details</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        }
       </div>
     </div>
   }

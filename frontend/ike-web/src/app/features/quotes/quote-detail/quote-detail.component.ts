@@ -1,6 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { QuotesService, QuoteDto } from '../../../core/services/quotes.service';
 import { DocumentsService } from '../../../core/services/documents.service';
 import { AuthService } from '../../../core/services/auth.service';
@@ -8,6 +9,8 @@ import { sanitizeInternalReturnTo } from '../../../core/services/navigation.serv
 import { BreadcrumbComponent, BreadcrumbItem } from '../../../shared/breadcrumb/breadcrumb.component';
 import { PageHeaderComponent } from '../../../shared/page-header/page-header.component';
 import { TablePaginationComponent } from '../../../shared/table-pagination/table-pagination.component';
+import { ToastService } from '../../../core/services/toast.service';
+import { ConfirmDialogService } from '../../../core/services/confirm-dialog.service';
 
 @Component({
   selector: 'app-quote-detail',
@@ -23,15 +26,23 @@ export class QuoteDetailComponent implements OnInit {
   actionError: string | null = null;
   sending = false;
   accepting = false;
+  uploadedPreviewOpen = false;
+  uploadedPreviewLoading = false;
+  uploadedPreviewSafeUrl: SafeResourceUrl | null = null;
+  uploadedPreviewBlob: Blob | null = null;
   lineItemsPage = 1;
   readonly lineItemsPageSize = 10;
+  deleting = false;
 
   constructor(
     private route: ActivatedRoute,
     private router: Router,
     private quotesService: QuotesService,
     private documentsService: DocumentsService,
-    public auth: AuthService
+    private sanitizer: DomSanitizer,
+    public auth: AuthService,
+    private toast: ToastService,
+    private confirmDialog: ConfirmDialogService
   ) {}
 
   ngOnInit(): void {
@@ -73,17 +84,70 @@ export class QuoteDetailComponent implements OnInit {
     const id = this.item?.id;
     if (!id) return;
     this.actionError = null;
+    const existingBlob = this.uploadedPreviewBlob;
+    if (existingBlob) {
+      this.downloadBlob(existingBlob, this.item?.uploadedFileName || `Uploaded-Quote-${this.item?.quoteNumber ?? id}`);
+      return;
+    }
     this.quotesService.getUploadedFile(id).subscribe({
       next: (blob) => {
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = this.item?.uploadedFileName || `Uploaded-Quote-${this.item?.quoteNumber ?? id}`;
-        a.click();
-        setTimeout(() => URL.revokeObjectURL(url), 60000);
+        this.downloadBlob(blob, this.item?.uploadedFileName || `Uploaded-Quote-${this.item?.quoteNumber ?? id}`);
       },
       error: () => (this.actionError = 'Uploaded quote download failed.')
     });
+  }
+
+  previewUploadedQuote(): void {
+    const id = this.item?.id;
+    if (!id) return;
+    this.actionError = null;
+    this.uploadedPreviewOpen = true;
+    if (this.uploadedPreviewSafeUrl) return;
+    this.uploadedPreviewLoading = true;
+    this.quotesService.previewUploadedFile(id).subscribe({
+      next: (blob) => {
+        this.uploadedPreviewBlob = blob;
+        this.loadUploadedPreviewDataUrl(blob);
+      },
+      error: () => {
+        this.actionError = 'Uploaded quote preview failed.';
+        this.uploadedPreviewLoading = false;
+        this.uploadedPreviewOpen = false;
+      }
+    });
+  }
+
+  closeUploadedPreview(): void {
+    this.uploadedPreviewOpen = false;
+  }
+
+  get uploadedPreviewIsImage(): boolean {
+    const type = (this.item?.uploadedContentType || '').toLowerCase();
+    const name = (this.item?.uploadedFileName || '').toLowerCase();
+    return type.startsWith('image/') || /\.(png|jpe?g|webp|gif)$/.test(name);
+  }
+
+  private downloadBlob(blob: Blob, fileName: string): void {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  }
+
+  private loadUploadedPreviewDataUrl(blob: Blob): void {
+    const reader = new FileReader();
+    reader.onload = () => {
+      this.uploadedPreviewSafeUrl = this.sanitizer.bypassSecurityTrustResourceUrl(String(reader.result || ''));
+      this.uploadedPreviewLoading = false;
+    };
+    reader.onerror = () => {
+      this.actionError = 'Uploaded quote preview failed.';
+      this.uploadedPreviewLoading = false;
+      this.uploadedPreviewOpen = false;
+    };
+    reader.readAsDataURL(blob);
   }
 
   get isClientUser(): boolean {
@@ -121,8 +185,7 @@ export class QuoteDetailComponent implements OnInit {
     this.quotesService.send(id, undefined, true).subscribe({
       next: () => {
         this.sending = false;
-        const status = this.item?.status === 'Accepted' ? 'Accepted' : 'Sent';
-        this.item = this.item ? { ...this.item, sentAt: new Date().toISOString(), status } : null;
+        this.item = this.item ? { ...this.item, sentAt: new Date().toISOString(), status: 'Sent' } : null;
       },
       error: () => {
         this.actionError = 'Send failed. Check email configuration.';
@@ -146,6 +209,31 @@ export class QuoteDetailComponent implements OnInit {
       error: (err) => {
         this.statusError = err.error?.message || 'Failed to update status.';
         this.updatingStatus = false;
+      }
+    });
+  }
+
+  async deleteQuote(): Promise<void> {
+    const item = this.item;
+    if (!item?.id || this.deleting) return;
+    const confirmed = await this.confirmDialog.confirm({
+      title: 'Delete quote',
+      message: `Delete quote "${item.quoteNumber}"? Safe links will be detached first and this cannot be undone.`,
+      confirmText: 'Delete',
+      confirmButtonClass: 'btn-danger'
+    });
+    if (!confirmed) return;
+    this.actionError = null;
+    this.deleting = true;
+    this.quotesService.delete(item.id).subscribe({
+      next: () => {
+        this.toast.success('Quote deleted.');
+        this.router.navigateByUrl('/quotes');
+      },
+      error: (err) => {
+        this.deleting = false;
+        this.actionError = err.error?.message || 'Failed to delete quote.';
+        this.toast.error(this.actionError!);
       }
     });
   }
@@ -189,7 +277,7 @@ export class QuoteDetailComponent implements OnInit {
   }
 
   get showPerItemDiscountDetails(): boolean {
-    if (!this.item || this.item.discountMode !== 'PerItem') return false;
+    if (!this.item || (this.item.discountMode !== 'PerItem' && this.item.discountMode !== 'PerItemAndGlobal')) return false;
     return (this.item.lineItems ?? []).some(li => (li.discountPercent ?? 0) > 0);
   }
 }

@@ -33,6 +33,8 @@ public class SuppliersController : ControllerBase
 
         var list = await _db.Suppliers
             .AsNoTracking()
+            .Include(s => s.Parts)
+            .ThenInclude(ps => ps.Part)
             .Where(s => s.CompanyId == companyId.Value)
             .OrderBy(s => s.Name)
             .Select(s => new SupplierDto
@@ -43,6 +45,8 @@ public class SuppliersController : ControllerBase
                 WebsiteUrl = s.WebsiteUrl,
                 Phone = s.Phone,
                 ContactPerson = s.ContactPerson,
+                PartIds = s.Parts.Select(ps => ps.PartId).ToList(),
+                PartNames = s.Parts.Where(ps => ps.Part != null).Select(ps => ps.Part.Name).ToList(),
                 Performance = new SupplierPerformanceDto()
             })
             .ToListAsync(ct);
@@ -111,6 +115,9 @@ public class SuppliersController : ControllerBase
             s.Email.ToLower() == normalizedEmail.ToLower(), ct);
         if (emailExists)
             return BadRequest(new { message = "A supplier with this email already exists." });
+        var partValidationError = await ValidateSupplierPartIdsAsync(request.PartIds, companyId.Value, ct);
+        if (partValidationError != null)
+            return BadRequest(new { message = partValidationError });
 
         var supplier = new Supplier
         {
@@ -124,6 +131,7 @@ public class SuppliersController : ControllerBase
             CreatedAt = DateTime.UtcNow
         };
         _db.Suppliers.Add(supplier);
+        await SyncSupplierPartLinksAsync(supplier.Id, request.PartIds, companyId.Value, ct);
         await _db.SaveChangesAsync(ct);
 
         return CreatedAtAction(nameof(List), new { id = supplier.Id }, new SupplierDto
@@ -134,6 +142,8 @@ public class SuppliersController : ControllerBase
             WebsiteUrl = supplier.WebsiteUrl,
             Phone = supplier.Phone,
             ContactPerson = supplier.ContactPerson,
+            PartIds = request.PartIds?.Distinct().ToList() ?? new List<Guid>(),
+            PartNames = await GetSupplierPartNamesAsync(supplier.Id, ct),
             Performance = new SupplierPerformanceDto()
         });
     }
@@ -177,12 +187,17 @@ public class SuppliersController : ControllerBase
             s.Email.ToLower() == normalizedEmail.ToLower(), ct);
         if (emailDuplicate)
             return BadRequest(new { message = "A supplier with this email already exists." });
+        var partValidationError = await ValidateSupplierPartIdsAsync(request.PartIds, companyId.Value, ct);
+        if (partValidationError != null)
+            return BadRequest(new { message = partValidationError });
 
         supplier.Name = normalizedName;
         supplier.Email = normalizedEmail;
         supplier.WebsiteUrl = normalizedWebsite;
         supplier.Phone = string.IsNullOrWhiteSpace(request.Phone) ? null : request.Phone.Trim();
         supplier.ContactPerson = string.IsNullOrWhiteSpace(request.ContactPerson) ? null : request.ContactPerson.Trim();
+        if (request.PartIds != null)
+            await SyncSupplierPartLinksAsync(supplier.Id, request.PartIds, companyId.Value, ct);
         await _db.SaveChangesAsync(ct);
 
         return Ok(new SupplierDto
@@ -193,8 +208,131 @@ public class SuppliersController : ControllerBase
             WebsiteUrl = supplier.WebsiteUrl,
             Phone = supplier.Phone,
             ContactPerson = supplier.ContactPerson,
+            PartIds = request.PartIds?.Distinct().ToList() ?? await GetSupplierPartIdsAsync(supplier.Id, ct),
+            PartNames = await GetSupplierPartNamesAsync(supplier.Id, ct),
             Performance = new SupplierPerformanceDto()
         });
+    }
+
+    [HttpDelete("{id:guid}")]
+    [Authorize(Policy = "RequireManagePurchaseOrders")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Delete(Guid id, CancellationToken ct = default)
+    {
+        var (companyId, _) = await _currentUser.GetClientScopeAsync(ct);
+        if (!companyId.HasValue)
+            return NotFound();
+
+        var supplier = await _db.Suppliers.FirstOrDefaultAsync(s => s.Id == id && s.CompanyId == companyId.Value, ct);
+        if (supplier == null)
+            return NotFound();
+
+        var lockedRequests = await _db.SupplierQuoteRequests.AsNoTracking()
+            .AnyAsync(r => r.SupplierId == id
+                && r.Status != SupplierQuoteRequestStatus.Requested
+                && r.Status != SupplierQuoteRequestStatus.Cancelled, ct);
+        if (lockedRequests)
+            return BadRequest(new { message = "Cannot delete supplier because it has quoted or ordered supplier quote requests." });
+
+        var parts = await _db.Parts.Where(p => p.SupplierId == id).ToListAsync(ct);
+        foreach (var part in parts)
+            part.SupplierId = null;
+
+        var links = await _db.PartSuppliers.Where(ps => ps.SupplierId == id).ToListAsync(ct);
+        _db.PartSuppliers.RemoveRange(links);
+
+        var safeRequests = await _db.SupplierQuoteRequests
+            .Where(r => r.SupplierId == id
+                && (r.Status == SupplierQuoteRequestStatus.Requested || r.Status == SupplierQuoteRequestStatus.Cancelled))
+            .ToListAsync(ct);
+        _db.SupplierQuoteRequests.RemoveRange(safeRequests);
+
+        _db.Suppliers.Remove(supplier);
+        await _db.SaveChangesAsync(ct);
+        return NoContent();
+    }
+
+    private async Task SyncSupplierPartLinksAsync(Guid supplierId, List<Guid>? requestedPartIds, Guid companyId, CancellationToken ct)
+    {
+        var requestedIds = (requestedPartIds ?? new List<Guid>()).Distinct().ToList();
+
+        var existingLinks = await _db.PartSuppliers
+            .Where(ps => ps.SupplierId == supplierId)
+            .ToListAsync(ct);
+        var existingPartIds = existingLinks.Select(ps => ps.PartId).ToHashSet();
+        var requestedPartIdSet = requestedIds.ToHashSet();
+        var removedPartIds = existingPartIds.Except(requestedPartIdSet).ToList();
+
+        _db.PartSuppliers.RemoveRange(existingLinks.Where(ps => !requestedPartIdSet.Contains(ps.PartId)));
+        foreach (var partId in requestedPartIds?.Distinct().Where(id => !existingPartIds.Contains(id)) ?? Enumerable.Empty<Guid>())
+        {
+            _db.PartSuppliers.Add(new PartSupplier
+            {
+                PartId = partId,
+                SupplierId = supplierId,
+                LinkedAt = DateTime.UtcNow
+            });
+        }
+
+        var affectedPartIds = requestedPartIdSet.Concat(removedPartIds).Distinct().ToList();
+        if (affectedPartIds.Count == 0)
+            return;
+
+        var affectedParts = await _db.Parts
+            .Where(p => affectedPartIds.Contains(p.Id))
+            .ToListAsync(ct);
+
+        foreach (var part in affectedParts)
+        {
+            if (requestedPartIdSet.Contains(part.Id) && !part.SupplierId.HasValue)
+            {
+                part.SupplierId = supplierId;
+                continue;
+            }
+
+            if (removedPartIds.Contains(part.Id) && part.SupplierId == supplierId)
+            {
+                var replacementSupplierId = await _db.PartSuppliers
+                    .Where(ps => ps.PartId == part.Id && ps.SupplierId != supplierId)
+                    .Select(ps => (Guid?)ps.SupplierId)
+                    .FirstOrDefaultAsync(ct);
+                part.SupplierId = replacementSupplierId;
+            }
+        }
+    }
+
+    private async Task<string?> ValidateSupplierPartIdsAsync(List<Guid>? requestedPartIds, Guid companyId, CancellationToken ct)
+    {
+        var requestedIds = (requestedPartIds ?? new List<Guid>()).Distinct().ToList();
+        if (requestedIds.Count == 0)
+            return null;
+
+        var validIds = await _db.Parts.AsNoTracking()
+            .Where(p => requestedIds.Contains(p.Id) && p.CompanyId == companyId && !p.IsLabour)
+            .Select(p => p.Id)
+            .ToListAsync(ct);
+        return validIds.Count == requestedIds.Count
+            ? null
+            : "One or more selected parts were not found in this supplier's company scope.";
+    }
+
+    private async Task<List<string>> GetSupplierPartNamesAsync(Guid supplierId, CancellationToken ct)
+    {
+        return await _db.PartSuppliers.AsNoTracking()
+            .Where(ps => ps.SupplierId == supplierId && ps.Part != null)
+            .Select(ps => ps.Part.Name)
+            .OrderBy(name => name)
+            .ToListAsync(ct);
+    }
+
+    private async Task<List<Guid>> GetSupplierPartIdsAsync(Guid supplierId, CancellationToken ct)
+    {
+        return await _db.PartSuppliers.AsNoTracking()
+            .Where(ps => ps.SupplierId == supplierId)
+            .Select(ps => ps.PartId)
+            .ToListAsync(ct);
     }
 
     private static bool IsValidEmail(string email)
@@ -278,6 +416,8 @@ public class SupplierDto
     public string? WebsiteUrl { get; set; }
     public string? Phone { get; set; }
     public string? ContactPerson { get; set; }
+    public List<Guid> PartIds { get; set; } = new();
+    public List<string> PartNames { get; set; } = new();
     public SupplierPerformanceDto Performance { get; set; } = new();
 }
 
@@ -300,6 +440,7 @@ public class CreateSupplierRequest
     public string? WebsiteUrl { get; set; }
     public string? Phone { get; set; }
     public string? ContactPerson { get; set; }
+    public List<Guid>? PartIds { get; set; }
 }
 
 public class UpdateSupplierRequest
@@ -309,4 +450,5 @@ public class UpdateSupplierRequest
     public string? WebsiteUrl { get; set; }
     public string? Phone { get; set; }
     public string? ContactPerson { get; set; }
+    public List<Guid>? PartIds { get; set; }
 }

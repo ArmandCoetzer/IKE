@@ -36,6 +36,7 @@
             <th>Site</th>
             <th>Assigned</th>
             <th>Status</th>
+            <th>Invoice</th>
             <th>Created</th>
             <th></th>
           </tr>
@@ -53,6 +54,7 @@
                   [class.status-progress]="(j.status || '').toLowerCase() === 'in progress'"
                   [class.status-completed]="(j.status || '').toLowerCase() === 'completed' || (j.status || '').toLowerCase() === 'done'">{{ j.status }}</span>
               </td>
+              <td>{{ invoiceStatusLabel(j) }}</td>
               <td>{{ j.createdAt | date:'short' }}</td>
               <td><a class="btn btn-sm btn-outline-primary" [routerLink]="['/job-cards', j.id]">View</a></td>
             </tr>

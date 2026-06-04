@@ -13,15 +13,19 @@ import { PageHeaderComponent } from '../../../shared/page-header/page-header.com
 import { TablePaginationComponent } from '../../../shared/table-pagination/table-pagination.component';
 
 type QuoteInputMode = 'materials' | 'guestimation' | 'upload';
+type QuoteDiscountMode = 'None' | 'Global' | 'PerItem' | 'PerItemAndGlobal';
 
 interface QuoteLineRow {
   lineType: string;
+  code?: string;
   description: string;
   unit?: string;
   quantity: number;
   unitPrice: number;
   discountPercent: number;
   partId?: string;
+  matchStatus?: string;
+  addMissingItemToSystem?: boolean;
 }
 
 @Component({
@@ -41,11 +45,23 @@ export class QuoteAddComponent implements OnInit {
   notes = '';
   validUntil = '';
   quoteInputMode: QuoteInputMode = 'guestimation';
-  discountMode: 'None' | 'Global' | 'PerItem' = 'None';
+  discountMode: QuoteDiscountMode = 'None';
   globalDiscountPercent = 0;
   quoteAmount: number | null = null;
   deferPricing = false;
   uploadedQuoteFile: File | null = null;
+  uploadPreviewLoading = false;
+  uploadPreviewReady = false;
+  uploadPreviewDialogOpen = false;
+  uploadPreviewApproved = false;
+  extractedQuoteNumber: string | null = null;
+  extractedSupplierName: string | null = null;
+  extractedSourceCompanyName: string | null = null;
+  extractedClientName: string | null = null;
+  selectedClientNameFromPreview: string | null = null;
+  clientNameMatchesSelected = true;
+  clientMismatchApproved = false;
+  extractedText: string | null = null;
   lineItems: QuoteLineRow[] = [];
   lineItemsPage = 1;
   readonly lineItemsPageSize = 10;
@@ -112,10 +128,19 @@ export class QuoteAddComponent implements OnInit {
     if (this.fromServiceRequest) return;
     this.siteId = null;
     this.sites = [];
+    if (this.quoteInputMode === 'upload') {
+      this.clearUploadPreview();
+    }
     if (!this.clientId) return;
     this.sitesService.list(this.clientId, true).subscribe({
       next: (sites) => (this.sites = sites)
     });
+  }
+
+  onSiteChange(): void {
+    if (this.quoteInputMode === 'upload') {
+      this.clearUploadPreview();
+    }
   }
 
   loadQuoteParts(): void {
@@ -138,11 +163,11 @@ export class QuoteAddComponent implements OnInit {
   get quoteTotalFromLines(): number {
     const valid = this.lineItems.filter(li => li.quantity > 0 && li.unitPrice >= 0);
     const subtotal = valid.reduce((s, li) => s + li.quantity * li.unitPrice, 0);
-    const perItemDiscount = this.discountMode === 'PerItem'
+    const perItemDiscount = (this.discountMode === 'PerItem' || this.quoteInputMode === 'upload')
       ? valid.reduce((s, li) => s + (li.quantity * li.unitPrice * this.clampPercent(li.discountPercent) / 100), 0)
       : 0;
     const afterPerItem = subtotal - perItemDiscount;
-    const globalDiscount = this.discountMode === 'Global'
+    const globalDiscount = (this.discountMode === 'Global' || this.discountMode === 'PerItemAndGlobal' || (this.quoteInputMode === 'upload' && this.clampPercent(this.globalDiscountPercent) > 0))
       ? afterPerItem * this.clampPercent(this.globalDiscountPercent) / 100
       : 0;
     return Math.max(0, afterPerItem - globalDiscount);
@@ -167,7 +192,7 @@ export class QuoteAddComponent implements OnInit {
   }
 
   lineDiscountAmount(li: QuoteLineRow): number {
-    if (this.discountMode !== 'PerItem') return 0;
+    if (this.discountMode !== 'PerItem' && this.quoteInputMode !== 'upload') return 0;
     return this.lineSubtotal(li) * this.clampPercent(li.discountPercent) / 100;
   }
 
@@ -193,15 +218,18 @@ export class QuoteAddComponent implements OnInit {
       this.quoteAmount = null;
       this.deferPricing = false;
       this.uploadedQuoteFile = null;
+      this.clearUploadPreview();
     } else if (mode === 'upload') {
       this.lineItems = [];
       this.quoteAmount = null;
       this.deferPricing = false;
       this.discountMode = 'None';
       this.globalDiscountPercent = 0;
+      this.clearUploadPreview(false);
     } else {
       this.lineItems = [];
       this.uploadedQuoteFile = null;
+      this.clearUploadPreview();
       if (this.discountMode === 'PerItem') this.discountMode = 'None';
     }
   }
@@ -217,9 +245,186 @@ export class QuoteAddComponent implements OnInit {
     }
   }
 
+  onUploadOverallDiscountChange(): void {
+    if (this.quoteInputMode !== 'upload') return;
+    const hasLineDiscounts = this.lineItems.some(li => this.clampPercent(li.discountPercent) > 0);
+    const hasGlobalDiscount = this.clampPercent(this.globalDiscountPercent) > 0;
+    this.discountMode = hasLineDiscounts && hasGlobalDiscount
+      ? 'PerItemAndGlobal'
+      : hasLineDiscounts
+        ? 'PerItem'
+        : hasGlobalDiscount
+          ? 'Global'
+          : 'None';
+    this.uploadPreviewApproved = false;
+  }
+
   onUploadedQuoteSelected(event: Event): void {
     const input = event.target as HTMLInputElement;
+    if (!this.clientId || !this.siteId) {
+      input.value = '';
+      this.uploadedQuoteFile = null;
+      this.toast.error('Select client and site before uploading a quote.');
+      return;
+    }
     this.uploadedQuoteFile = input.files?.[0] ?? null;
+    this.clearUploadPreview(false);
+    if (this.uploadedQuoteFile) {
+      this.previewUploadedQuote();
+    }
+  }
+
+  clearUploadPreview(clearFile = true): void {
+    if (clearFile) this.uploadedQuoteFile = null;
+    this.uploadPreviewLoading = false;
+    this.uploadPreviewReady = false;
+    this.uploadPreviewDialogOpen = false;
+    this.uploadPreviewApproved = false;
+    this.extractedQuoteNumber = null;
+    this.extractedSupplierName = null;
+    this.extractedSourceCompanyName = null;
+    this.extractedClientName = null;
+    this.selectedClientNameFromPreview = null;
+    this.clientNameMatchesSelected = true;
+    this.clientMismatchApproved = false;
+    this.extractedText = null;
+    if (this.quoteInputMode === 'upload') {
+      this.globalDiscountPercent = 0;
+      this.discountMode = 'None';
+    }
+    if (this.quoteInputMode === 'upload') {
+      this.lineItems = [];
+    }
+  }
+
+  previewUploadedQuote(): void {
+    this.error = null;
+    if (!this.uploadedQuoteFile) return;
+    if (!this.clientId || !this.siteId) {
+      this.toast.error('Select client and site before uploading a quote.');
+      return;
+    }
+    this.uploadPreviewLoading = true;
+    this.quotesService.uploadPreview({
+      clientId: this.clientId,
+      siteId: this.siteId,
+      file: this.uploadedQuoteFile
+    }).subscribe({
+      next: (preview) => {
+        this.uploadPreviewLoading = false;
+        this.uploadPreviewReady = true;
+        this.uploadPreviewApproved = false;
+        this.uploadPreviewDialogOpen = true;
+        this.extractedQuoteNumber = preview.extractedQuoteNumber ?? null;
+        this.extractedSupplierName = preview.extractedSupplierName ?? null;
+        this.extractedSourceCompanyName = preview.extractedSourceCompanyName ?? preview.extractedSupplierName ?? null;
+        this.extractedClientName = preview.extractedClientName ?? null;
+        this.selectedClientNameFromPreview = preview.selectedClientName ?? null;
+        this.clientNameMatchesSelected = preview.clientNameMatchesSelected;
+        this.clientMismatchApproved = false;
+        this.extractedText = preview.extractedText ?? null;
+        this.description = preview.description || this.description;
+        this.quoteAmount = preview.extractedAmount ?? null;
+        this.globalDiscountPercent = this.clampPercent(preview.overallDiscountPercent ?? 0);
+        this.validUntil = preview.validUntil ? preview.validUntil.substring(0, 10) : '';
+        this.lineItems = (preview.lineItems ?? []).map(li => ({
+          lineType: li.lineType || 'Part',
+          code: li.code || '',
+          description: li.description || '',
+          quantity: li.quantity || 1,
+          unitPrice: li.unitPrice || 0,
+          discountPercent: li.discountPercent || 0,
+          partId: li.suggestedPartId,
+          matchStatus: li.matchStatus,
+          addMissingItemToSystem: false
+        }));
+        this.onUploadOverallDiscountChange();
+        this.toast.success(this.lineItems.length ? 'Quote details extracted for review.' : 'Quote uploaded for review. No line items were detected.');
+      },
+      error: (err) => {
+        this.uploadPreviewLoading = false;
+        const msg = err.error?.message || 'Failed to extract quote details.';
+        this.error = msg;
+        this.toast.error(msg);
+      }
+    });
+  }
+
+  openUploadPreviewDialog(): void {
+    if (this.uploadPreviewReady) {
+      this.uploadPreviewApproved = false;
+      this.uploadPreviewDialogOpen = true;
+    }
+  }
+
+  closeUploadPreviewDialog(): void {
+    this.uploadPreviewDialogOpen = false;
+  }
+
+  approveUploadPreview(): void {
+    if (!this.description.trim()) {
+      this.toast.error('Description is required before approving the quote.');
+      return;
+    }
+    if (!this.clientNameMatchesSelected && !this.clientMismatchApproved) {
+      this.toast.error('Confirm that the selected client is correct before approving this quote.');
+      return;
+    }
+    const missingItemError = this.validateMissingQuoteItemsForApproval();
+    if (missingItemError) {
+      this.toast.error(missingItemError);
+      return;
+    }
+    const invalidLine = this.lineItems.some(li => li.quantity <= 0 || li.unitPrice < 0 || !li.description.trim());
+    if (invalidLine) {
+      this.toast.error('Check extracted lines: each saved line needs a description, quantity and valid price.');
+      return;
+    }
+    this.uploadPreviewApproved = true;
+    this.uploadPreviewDialogOpen = false;
+    this.toast.success('Quote details approved.');
+  }
+
+  private validateMissingQuoteItemsForApproval(): string | null {
+    const addMissingLines = this.lineItems.filter(li => !!li.addMissingItemToSystem && !li.partId);
+    for (const li of addMissingLines) {
+      if (!li.code?.trim()) return 'Each item selected to be added to the system needs a code.';
+      if (!li.description?.trim()) return 'Each item selected to be added to the system needs a description/name.';
+    }
+    const seenCodes = new Set<string>();
+    const seenDescriptions = new Set<string>();
+    for (const li of addMissingLines) {
+      const code = li.code!.trim().toLowerCase();
+      if (seenCodes.has(code)) return `Duplicate item code "${li.code!.trim()}" cannot be added more than once.`;
+      seenCodes.add(code);
+
+      const description = this.normalizeMissingItemKey(li.description);
+      if (seenDescriptions.has(description)) return `Duplicate item description "${li.description.trim()}" cannot be added more than once.`;
+      seenDescriptions.add(description);
+    }
+    return null;
+  }
+
+  get canSelectMissingLineItems(): boolean {
+    return this.lineItems.some(li => !li.partId);
+  }
+
+  get allMissingLineItemsSelected(): boolean {
+    const rows = this.lineItems.filter(li => !li.partId);
+    return rows.length > 0 && rows.every(li => !!li.addMissingItemToSystem);
+  }
+
+  get someMissingLineItemsSelected(): boolean {
+    return this.lineItems.some(li => !li.partId && !!li.addMissingItemToSystem);
+  }
+
+  toggleAllMissingLineItems(checked: boolean): void {
+    this.lineItems = this.lineItems.map(li => li.partId ? li : { ...li, addMissingItemToSystem: checked });
+    this.uploadPreviewApproved = false;
+  }
+
+  private normalizeMissingItemKey(value: string): string {
+    return value.trim().replace(/\s+/g, ' ').toLowerCase();
   }
 
   addLineItem(lineType: 'Labour' | 'Part'): void {
@@ -247,19 +452,27 @@ export class QuoteAddComponent implements OnInit {
     if (partId) {
       const part = this.quoteParts.find(p => p.id === partId);
       if (part) {
-        row.description = part.description?.trim() || '';
+        if (this.quoteInputMode !== 'upload' || !row.description.trim()) {
+          row.description = part.description?.trim() || part.name;
+        }
         row.unit = part.unit?.trim() || '';
         if (part.unitPrice != null) row.unitPrice = part.unitPrice;
+        row.matchStatus = 'Mapped';
+        row.addMissingItemToSystem = false;
       }
-    } else {
+    } else if (this.quoteInputMode !== 'upload') {
       row.description = '';
       row.unit = '';
+    } else {
+      row.matchStatus = 'Manual';
     }
   }
 
   canSave(): boolean {
     if (!this.clientId || !this.siteId) return false;
-    if (this.quoteInputMode === 'upload') return !!this.uploadedQuoteFile;
+    if (this.quoteInputMode === 'upload') {
+      return !!this.uploadedQuoteFile && !this.uploadPreviewLoading && this.uploadPreviewReady && this.uploadPreviewApproved && !!this.description.trim();
+    }
     if (!this.description.trim()) return false;
     if (this.quoteInputMode === 'materials') {
       const valid = this.lineItems.filter(li => li.quantity > 0 && li.unitPrice >= 0);
@@ -284,12 +497,39 @@ export class QuoteAddComponent implements OnInit {
         this.toast.error(this.error);
         return;
       }
+      if (!this.uploadPreviewApproved) {
+        this.error = 'Review and approve the extracted quote details before saving.';
+        this.toast.error(this.error);
+        return;
+      }
+      if (!this.description.trim()) {
+        this.error = 'Description is required.';
+        this.toast.error(this.error);
+        return;
+      }
+      const validUploadLines = this.lineItems.filter(li => li.quantity > 0 && li.unitPrice >= 0 && li.description.trim());
+      const uploadAmount = this.quoteAmount ?? (validUploadLines.length > 0 ? this.quoteTotalFromLines : 0);
       this.submitting = true;
       this.quotesService.upload({
         clientId: this.clientId,
         siteId: this.siteId,
         serviceRequestId: this.serviceRequestId || undefined,
         jobCardId: this.jobCardId || undefined,
+        amount: uploadAmount,
+        globalDiscountPercent: this.clampPercent(this.globalDiscountPercent),
+        description: this.description.trim(),
+        notes: this.notes.trim() || undefined,
+        validUntil: this.validUntil || undefined,
+        lineItems: validUploadLines.map(li => ({
+          lineType: li.lineType,
+          description: li.description.trim(),
+          quantity: li.quantity,
+          unitPrice: li.unitPrice,
+          discountPercent: this.clampPercent(li.discountPercent),
+          partId: li.partId,
+          code: li.code?.trim() || undefined,
+          addMissingItemToSystem: !!li.addMissingItemToSystem
+        })),
         file: this.uploadedQuoteFile
       }).subscribe({
         next: (quote) => {

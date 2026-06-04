@@ -115,6 +115,16 @@ public class JobCardsController : ControllerBase
             total = merged.Count;
             jobs = merged.Skip(skip).Take(pageSizeClamped).ToList();
         }
+        var jobIds = jobs.Select(j => j.Id).ToList();
+        var invoiceStatuses = await _db.Invoices.AsNoTracking()
+            .Where(i => jobIds.Contains(i.JobCardId))
+            .OrderByDescending(i => i.CreatedAt)
+            .Select(i => new { i.JobCardId, i.Status })
+            .ToListAsync(ct);
+        var invoiceStatusByJobId = invoiceStatuses
+            .GroupBy(i => i.JobCardId)
+            .ToDictionary(g => g.Key, g => g.First().Status);
+
         var list = jobs.Select(j => new JobCardListDto
         {
             Id = j.Id,
@@ -130,6 +140,9 @@ public class JobCardsController : ControllerBase
             CreatedAt = j.CreatedAt,
             AssignedTechnicianNames = j.Assignments.Any()
                 ? string.Join(", ", j.Assignments.Select(a => a.User?.FullName ?? a.User?.Email ?? "").Where(x => !string.IsNullOrEmpty(x)))
+                : null,
+            InvoiceStatus = CompletedStatuses.Contains(j.Status, StringComparer.OrdinalIgnoreCase) && invoiceStatusByJobId.TryGetValue(j.Id, out var invoiceStatus)
+                ? invoiceStatus
                 : null,
             BlockedReason = j.BlockedReason
         }).ToList();

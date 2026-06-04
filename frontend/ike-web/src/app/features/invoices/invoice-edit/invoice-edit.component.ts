@@ -5,6 +5,7 @@ import { FormsModule } from '@angular/forms';
 import { InvoicesService, InvoiceDto, InvoiceLineItemInput, UpdateInvoiceRequest } from '../../../core/services/invoices.service';
 import { PartsService, PartDto } from '../../../core/services/parts.service';
 import { PageHeaderComponent } from '../../../shared/page-header/page-header.component';
+import { ToastService } from '../../../core/services/toast.service';
 
 interface EditableInvoiceLineItem {
   lineType: string;
@@ -37,7 +38,8 @@ export class InvoiceEditComponent implements OnInit {
     private route: ActivatedRoute,
     private router: Router,
     private invoicesService: InvoicesService,
-    private partsService: PartsService
+    private partsService: PartsService,
+    private toast: ToastService
   ) {}
 
   ngOnInit(): void {
@@ -49,22 +51,12 @@ export class InvoiceEditComponent implements OnInit {
     this.loading = true;
     this.invoicesService.get(this.id).subscribe({
       next: (inv) => {
-        this.item = inv;
         if (inv.status === 'Paid') {
           this.error = 'Paid invoices are locked and cannot be edited.';
           this.loading = false;
           return;
         }
-        this.dueDate = inv.dueDate ? inv.dueDate.toString().slice(0, 10) : '';
-        this.notes = inv.notes ?? '';
-        this.lineItems = (inv.lineItems ?? []).map(li => ({
-          lineType: li.lineType || 'Labour',
-          description: li.description || '',
-          quantity: li.quantity ?? 0,
-          unitPrice: li.unitPrice ?? 0,
-          discountPercent: li.discountPercent ?? 0,
-          partId: li.partId
-        }));
+        this.applyInvoice(inv);
         if (!inv.partsConfirmed) {
           this.partsService.list().subscribe({ next: (parts) => (this.parts = parts) });
         }
@@ -75,6 +67,20 @@ export class InvoiceEditComponent implements OnInit {
         this.loading = false;
       }
     });
+  }
+
+  private applyInvoice(inv: InvoiceDto): void {
+    this.item = inv;
+    this.dueDate = inv.dueDate ? inv.dueDate.toString().slice(0, 10) : '';
+    this.notes = inv.notes ?? '';
+    this.lineItems = (inv.lineItems ?? []).map(li => ({
+      lineType: li.lineType || 'Labour',
+      description: li.description || '',
+      quantity: li.quantity ?? 0,
+      unitPrice: li.unitPrice ?? 0,
+      discountPercent: li.discountPercent ?? 0,
+      partId: li.partId
+    }));
   }
 
   partsForLineType(lineType: string): PartDto[] {
@@ -134,10 +140,15 @@ export class InvoiceEditComponent implements OnInit {
       body.lineItems = lineItems;
     }
     this.invoicesService.update(this.id, body).subscribe({
-      next: () => this.router.navigate(['/invoices', this.id]),
+      next: (invoice) => {
+        this.submitting = false;
+        this.applyInvoice(invoice);
+        this.toast.success('Invoice updated.');
+      },
       error: (err) => {
         this.submitting = false;
         this.error = err.error?.message || 'Failed to update invoice.';
+        this.toast.error(this.error!);
       }
     });
   }

@@ -131,10 +131,23 @@
               } @else {
                 <div class="mb-3">
                   <label class="form-label">Quote file</label>
-                  <input type="file" class="form-control" name="existingQuoteUploadFile" accept=".pdf,.png,.jpg,.jpeg,.webp,.txt,.csv" (change)="onExistingQuoteUploadSelected($event)" />
-                  <span class="form-text">The uploaded quote will be saved, linked to this new job, and locked from editing.</span>
+                  <input type="file" class="form-control" name="existingQuoteUploadFile" accept=".pdf,.png,.jpg,.jpeg,.webp,.txt,.csv" [disabled]="!clientId || !siteId || existingQuoteUploadPreviewLoading" (change)="onExistingQuoteUploadSelected($event)" />
+                  <span class="form-text">The uploaded quote will be extracted for review, saved, linked to this new job, and locked from editing.</span>
                   @if (existingQuoteUploadFile) {
-                    <p class="small text-muted mt-2 mb-0">Selected: {{ existingQuoteUploadFile.name }}</p>
+                    <div class="d-flex align-items-center gap-2 flex-wrap mt-2">
+                      <p class="small text-muted mb-0">Selected: {{ existingQuoteUploadFile.name }}</p>
+                      @if (existingQuoteUploadPreviewApproved) {
+                        <span class="badge bg-success">Approved</span>
+                      } @else if (existingQuoteUploadPreviewReady) {
+                        <span class="badge bg-warning text-dark">Needs approval</span>
+                      }
+                      @if (existingQuoteUploadPreviewReady) {
+                        <button type="button" class="btn btn-outline-secondary btn-sm" (click)="openExistingQuoteUploadPreviewDialog()">Review / amend</button>
+                      }
+                    </div>
+                  }
+                  @if (existingQuoteUploadPreviewLoading) {
+                    <p class="small text-muted mt-2 mb-0">Extracting quote details...</p>
                   }
                 </div>
               }
@@ -267,7 +280,7 @@
           @if (startType === 'request') {
             <button type="button" class="btn btn-primary" (click)="nextFromStep2()" [disabled]="submitting || !selectedRequestId || activeRequests.length === 0">{{ submitting ? 'Creating…' : 'Next' }}</button>
           } @else if (startType === 'existingQuote') {
-            <button type="button" class="btn btn-primary" (click)="nextFromStep2()" [disabled]="submitting || !clientId || (existingQuoteMode === 'select' ? (!selectedExistingQuoteId || existingQuotes.length === 0) : (!siteId || !existingQuoteUploadFile))">{{ submitting ? (existingQuoteMode === 'upload' ? 'Uploading…' : 'Linking…') : 'Next' }}</button>
+            <button type="button" class="btn btn-primary" (click)="nextFromStep2()" [disabled]="submitting || !clientId || (existingQuoteMode === 'select' ? (!selectedExistingQuoteId || existingQuotes.length === 0) : (!siteId || !existingQuoteUploadFile || existingQuoteUploadPreviewLoading || !existingQuoteUploadPreviewApproved))">{{ submitting ? (existingQuoteMode === 'upload' ? 'Uploading…' : 'Linking…') : 'Next' }}</button>
           } @else {
             <button type="button" class="btn btn-primary" (click)="nextFromStep2()" [disabled]="submitting || !clientId || !siteId || !canProceedQuoteStep()">{{ submitting ? 'Creating…' : 'Next' }}</button>
           }
@@ -495,20 +508,38 @@
               <div>
                 <label class="form-label fw-medium mb-1">Stock items for this job (optional)</label>
                 <p class="text-muted small mb-0">
-                  Add stock items that will be used for this job.
+                  Items from the approved quote are included here. Add any extra stock items that will also be used for this job.
                 </p>
               </div>
-              @if (plannedStockItems.length) {
-                <span class="badge bg-light text-dark">{{ plannedStockItems.length }} item(s)</span>
+              @if (jobStockItemCount) {
+                <span class="badge bg-light text-dark">{{ jobStockItemCount }} item(s)</span>
               }
             </div>
 
-            @if (stockPartsForPlanning.length === 0) {
+            @if (stockPartsForPlanning.length === 0 && quoteStockItemsForJob.length === 0) {
               <p class="text-warning small mb-0">No stock parts are available. Add stock from Parts if needed.</p>
             } @else {
+              @if (quoteStockItemsForJob.length) {
+                <label class="form-label small">From approved quote</label>
+                <app-table [compact]="true">
+                  <thead>
+                    <tr><th>Item</th><th>Qty</th><th>Available stock</th><th>Unit</th></tr>
+                  </thead>
+                  <tbody>
+                    @for (p of quoteStockItemsForJob; track $index) {
+                      <tr>
+                        <td>{{ p.partName }}</td>
+                        <td>{{ p.quantity }}</td>
+                        <td [class.text-danger]="p.quantity > p.stockQuantity">{{ p.stockQuantity }}</td>
+                        <td>{{ p.unit || '—' }}</td>
+                      </tr>
+                    }
+                  </tbody>
+                </app-table>
+              }
               <div class="row g-2 align-items-end mb-3">
                 <div class="col-md-5">
-                  <label class="form-label small">Stock item</label>
+                  <label class="form-label small">Additional stock item</label>
                   <select class="form-select form-select-sm" [(ngModel)]="selectedPlannedStockPartId" name="selectedPlannedStockPartId">
                     <option [ngValue]="null">— Select stock item —</option>
                     @for (p of availableStockPartsForPlanning; track p.id) {
@@ -532,9 +563,10 @@
               </div>
 
               @if (plannedStockItems.length) {
+                <label class="form-label small">Additional stock items</label>
                 <app-table [compact]="true">
                   <thead>
-                    <tr><th>Item</th><th>Qty</th><th>Guaranteed stock</th><th>Unit</th><th></th></tr>
+                    <tr><th>Item</th><th>Qty</th><th>Available stock</th><th>Unit</th><th></th></tr>
                   </thead>
                   <tbody>
                     @for (p of plannedStockItems; track p.partId) {
@@ -683,6 +715,130 @@
         } @else if (partsInsufficientInQuote.length) {
           <p class="text-warning small mt-2 mb-0">Insufficient stock is flagged and can be handled from the job card.</p>
         }
+      </div>
+    </div>
+  }
+  @if (existingQuoteUploadPreviewDialogOpen) {
+    <div class="modal d-block" tabindex="-1" role="dialog" style="background: rgba(0,0,0,.5)">
+      <div class="modal-dialog modal-xl modal-dialog-scrollable" role="document">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">Review extracted quote</h5>
+            <button type="button" class="btn-close" aria-label="Close" (click)="closeExistingQuoteUploadPreviewDialog()"></button>
+          </div>
+          <div class="modal-body">
+            <div class="d-flex justify-content-between gap-3 flex-wrap mb-3">
+              <p class="small text-muted mb-0">Correct anything that was read incorrectly, map stock where possible, then approve these details before continuing with the job.</p>
+              <div class="small text-muted">
+                @if (extractedQuoteNumber) {
+                  <span class="me-3">Original #: {{ extractedQuoteNumber }}</span>
+                }
+                @if (extractedSourceCompanyName) {
+                  <span>From: {{ extractedSourceCompanyName }}</span>
+                }
+              </div>
+            </div>
+            <div class="mb-3">
+              @if (clientNameMatchesSelected) {
+                <div class="alert alert-success py-2 mb-0">
+                  Quote client matches selected client: <strong>{{ extractedClientName || selectedClientNameFromPreview }}</strong>
+                </div>
+              } @else {
+                <div class="alert alert-warning py-2 mb-0">
+                  <div><strong>Client check needed.</strong> Selected client: <strong>{{ selectedClientNameFromPreview || 'Selected client' }}</strong></div>
+                  <div>Quote TO name: <strong>{{ extractedClientName || 'Could not confidently read the TO client from the file' }}</strong></div>
+                  <div class="form-check mt-2">
+                    <input type="checkbox" class="form-check-input" id="startJobClientMismatchApproved" [(ngModel)]="clientMismatchApproved" name="startJobClientMismatchApproved" />
+                    <label class="form-check-label" for="startJobClientMismatchApproved">I confirm the selected client is correct for this quote.</label>
+                  </div>
+                </div>
+              }
+            </div>
+            <div class="row g-3 mb-3">
+              <div class="col-md-5">
+                <label class="form-label">Description</label>
+                <textarea class="form-control" [(ngModel)]="quoteDescription" name="existingUploadDescription" rows="2" required></textarea>
+              </div>
+              <div class="col-md-2">
+                <label class="form-label">Amount</label>
+                <input type="number" class="form-control" [(ngModel)]="quoteAmount" name="existingUploadQuoteAmount" step="0.01" min="0" />
+                @if (quoteLineItems.length) {
+                  <span class="form-text">Line subtotal excl. VAT: R{{ quoteTotalFromLines | number:'1.2-2' }}</span>
+                }
+              </div>
+              <div class="col-md-2">
+                <label class="form-label">Overall discount %</label>
+                <input type="number" class="form-control" [(ngModel)]="quoteGlobalDiscountPercent" name="existingUploadOverallDiscountPercent" step="0.01" min="0" max="100" (ngModelChange)="onExistingQuoteUploadDiscountChange()" />
+              </div>
+              <div class="col-md-3">
+                <label class="form-label">Valid until</label>
+                <input type="date" class="form-control" [(ngModel)]="quoteValidUntil" name="existingUploadValidUntil" (click)="openDatePicker($event)" />
+              </div>
+            </div>
+            <label class="form-label mb-2">Extracted line items</label>
+            @if (quoteLineItems.length) {
+              <app-table [compact]="true">
+                <thead><tr><th>Type</th><th>Code</th><th>Description</th><th>Stock mapping</th><th>
+                  <div>Add missing</div>
+                  <div class="form-check mb-0">
+                    <input type="checkbox" class="form-check-input" [checked]="allMissingQuoteLineItemsSelected" [indeterminate]="someMissingQuoteLineItemsSelected && !allMissingQuoteLineItemsSelected" [disabled]="!canSelectMissingQuoteLineItems" (change)="toggleAllMissingQuoteLineItems($any($event.target).checked)" aria-label="Select all missing extracted items" />
+                    <label class="form-check-label small">All</label>
+                  </div>
+                </th><th>Qty</th><th>Unit price</th><th>Disc %</th><th>Total</th><th></th></tr></thead>
+                <tbody>
+                  @for (li of quoteLineItems | slice:(quoteLineItemsPage - 1) * quoteLineItemsPageSize : quoteLineItemsPage * quoteLineItemsPageSize; track $index) {
+                    <tr>
+                      <td>
+                        <select class="form-select form-select-sm" [(ngModel)]="li.lineType" name="existingUploadLineType{{(quoteLineItemsPage - 1) * quoteLineItemsPageSize + $index}}">
+                          <option [ngValue]="'Part'">Part</option>
+                          <option [ngValue]="'Labour'">Non-stock / labour</option>
+                        </select>
+                      </td>
+                      <td><input type="text" class="form-control form-control-sm" [(ngModel)]="li.code" name="existingUploadCode{{(quoteLineItemsPage - 1) * quoteLineItemsPageSize + $index}}" [readonly]="!li.addMissingItemToSystem || !!li.partId" /></td>
+                      <td><input type="text" class="form-control form-control-sm" [(ngModel)]="li.description" name="existingUploadLineDescription{{(quoteLineItemsPage - 1) * quoteLineItemsPageSize + $index}}" [readonly]="!li.addMissingItemToSystem || !!li.partId" /></td>
+                      <td>
+                        @if (li.lineType === 'Part') {
+                          <select class="form-select form-select-sm" [(ngModel)]="li.partId" (ngModelChange)="onQuotePartSelect((quoteLineItemsPage - 1) * quoteLineItemsPageSize + $index, $event)" name="existingUploadPart{{(quoteLineItemsPage - 1) * quoteLineItemsPageSize + $index}}">
+                            <option [ngValue]="null">Non-stock / do not deduct stock</option>
+                            @for (p of partsForLineType('Part'); track p.id) {
+                              <option [ngValue]="p.id">{{ stockDisplayLabel(p) }}</option>
+                            }
+                          </select>
+                        } @else {
+                          <span class="text-muted small">No stock deduction</span>
+                        }
+                      </td>
+                      <td>
+                        @if (!li.partId) {
+                          <div class="form-check">
+                            <input type="checkbox" class="form-check-input" [(ngModel)]="li.addMissingItemToSystem" name="existingUploadAddMissing{{(quoteLineItemsPage - 1) * quoteLineItemsPageSize + $index}}" />
+                            <label class="form-check-label small">
+                              Add {{ li.lineType === 'Part' ? 'stock item' : 'non-stock item' }}
+                            </label>
+                          </div>
+                        } @else {
+                          <span class="text-muted small">Already mapped</span>
+                        }
+                      </td>
+                      <td><input type="number" class="form-control form-control-sm ike-line-qty-input" [(ngModel)]="li.quantity" name="existingUploadQty{{(quoteLineItemsPage - 1) * quoteLineItemsPageSize + $index}}" step="0.01" min="0" /></td>
+                      <td><input type="number" class="form-control form-control-sm ike-line-price-input" [(ngModel)]="li.unitPrice" name="existingUploadPrice{{(quoteLineItemsPage - 1) * quoteLineItemsPageSize + $index}}" step="0.01" min="0" /></td>
+                      <td><input type="number" class="form-control form-control-sm ike-line-qty-input" [(ngModel)]="li.discountPercent" name="existingUploadDiscount{{(quoteLineItemsPage - 1) * quoteLineItemsPageSize + $index}}" step="0.01" min="0" max="100" (ngModelChange)="onExistingQuoteUploadDiscountChange()" /></td>
+                      <td class="text-nowrap">R{{ quoteLineDiscountedTotal(li) | number:'1.2-2' }}</td>
+                      <td><button type="button" class="btn btn-link btn-sm text-danger p-0" (click)="removeQuoteLineItem((quoteLineItemsPage - 1) * quoteLineItemsPageSize + $index)">Remove</button></td>
+                    </tr>
+                  }
+                </tbody>
+              </app-table>
+              <app-table-pagination [totalCount]="quoteLineItems.length" [page]="quoteLineItemsPage" [pageSize]="quoteLineItemsPageSize" (pageChange)="quoteLineItemsPage = $event" />
+            } @else {
+              <p class="small text-muted mb-0">No line items were detected. You can still approve the uploaded quote or add lines manually.</p>
+            }
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-light border" (click)="closeExistingQuoteUploadPreviewDialog()">Keep editing later</button>
+            <button type="button" class="btn btn-primary" (click)="approveExistingQuoteUploadPreview()">Approve quote details</button>
+          </div>
+        </div>
       </div>
     </div>
   }

@@ -33,9 +33,72 @@
           </div>
         </div>
 
+        <div class="mt-4 border rounded p-3 bg-light">
+          <div class="d-flex justify-content-between align-items-center gap-2 flex-wrap mb-2">
+            <div>
+              <label class="form-label fw-medium mb-0">Linked parts</label>
+              <div class="form-text">Select the stock items this supplier can provide. Labour/non-stock items are excluded.</div>
+            </div>
+            <span class="badge text-bg-secondary">{{ selectedPartIds.length }} selected</span>
+          </div>
+          <div class="d-flex gap-2 flex-wrap mb-2">
+            <input class="form-control form-control-sm" style="max-width: 320px" placeholder="Search parts..." [(ngModel)]="partSearch" name="partSearch" />
+            <button type="button" class="btn btn-outline-secondary btn-sm" (click)="selectFilteredParts()" [disabled]="availableParts.length === 0">Link visible available</button>
+            <button type="button" class="btn btn-outline-secondary btn-sm" (click)="clearSelectedParts()" [disabled]="selectedPartIds.length === 0">Clear</button>
+          </div>
+          <div class="row g-3">
+            <div class="col-lg-6">
+              <div class="fw-medium small mb-1">Linked to this supplier</div>
+              <div class="border rounded bg-white p-2" style="max-height: 260px; overflow: auto">
+                @if (linkedParts.length) {
+                  @for (part of linkedParts; track part.id) {
+                    <div class="d-flex align-items-center justify-content-between gap-2 py-1">
+                      <div>
+                        <span class="fw-medium">{{ part.name }}</span>
+                        @if (part.partNumber) {
+                          <span class="text-muted small">({{ part.partNumber }})</span>
+                        }
+                      </div>
+                      <button type="button" class="btn btn-outline-danger btn-sm" (click)="unlinkPart(part.id)">Unlink</button>
+                    </div>
+                  }
+                } @else {
+                  <p class="text-muted small mb-0">No parts linked to this supplier.</p>
+                }
+              </div>
+            </div>
+            <div class="col-lg-6">
+              <div class="fw-medium small mb-1">Available parts</div>
+              <div class="border rounded bg-white p-2" style="max-height: 260px; overflow: auto">
+                @if (availableParts.length) {
+                  @for (part of availableParts; track part.id) {
+                    <div class="d-flex align-items-center justify-content-between gap-2 py-1">
+                      <div>
+                        <span class="fw-medium">{{ part.name }}</span>
+                        @if (part.partNumber) {
+                          <span class="text-muted small">({{ part.partNumber }})</span>
+                        }
+                        @if (part.supplierNames.length) {
+                          <span class="text-muted small">Linked elsewhere: {{ part.supplierNames.join(', ') }}</span>
+                        }
+                      </div>
+                      <button type="button" class="btn btn-outline-primary btn-sm" (click)="linkPart(part.id)">Link</button>
+                    </div>
+                  }
+                } @else {
+                  <p class="text-muted small mb-0">No available parts match your search.</p>
+                }
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div class="mt-4 d-flex gap-2">
           <button class="btn btn-primary" (click)="save()" [disabled]="saving || !name.trim() || !email.trim()">
             {{ saving ? 'Saving…' : 'Save changes' }}
+          </button>
+          <button type="button" class="btn btn-outline-danger" (click)="deleteSupplier()" [disabled]="deleting || saving">
+            {{ deleting ? 'Deleting...' : 'Delete supplier' }}
           </button>
           <a class="btn btn-light border" routerLink="/suppliers">Cancel</a>
         </div>

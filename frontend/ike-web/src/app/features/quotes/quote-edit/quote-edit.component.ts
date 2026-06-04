@@ -6,6 +6,7 @@ import { QuotesService, QuoteDto, UpdateQuoteRequest } from '../../../core/servi
 import { PartsService, PartDto } from '../../../core/services/parts.service';
 import { PageHeaderComponent } from '../../../shared/page-header/page-header.component';
 import { TablePaginationComponent } from '../../../shared/table-pagination/table-pagination.component';
+import { ToastService } from '../../../core/services/toast.service';
 
 interface QuoteEditLineRow {
   lineType: string;
@@ -46,7 +47,8 @@ export class QuoteEditComponent implements OnInit {
     private route: ActivatedRoute,
     private router: Router,
     private quotesService: QuotesService,
-    private partsService: PartsService
+    private partsService: PartsService,
+    private toast: ToastService
   ) {}
 
   ngOnInit(): void {
@@ -58,28 +60,12 @@ export class QuoteEditComponent implements OnInit {
     this.loading = true;
     this.quotesService.get(this.id).subscribe({
       next: (q) => {
-        this.item = q;
         if (q.isUploaded) {
           this.error = 'Uploaded quotes are read-only and cannot be edited.';
           this.loading = false;
           return;
         }
-        this.amount = q.amount ?? 0;
-        this.currency = q.currency ?? 'ZAR';
-        this.description = q.description ?? '';
-        this.discountMode = (q.discountMode as 'None' | 'Global' | 'PerItem') ?? 'None';
-        this.globalDiscountPercent = q.globalDiscountPercent ?? 0;
-        this.notes = q.notes ?? '';
-        this.validUntil = q.validUntil ? q.validUntil.toString().slice(0, 10) : '';
-        this.lineItems = (q.lineItems ?? []).map(li => ({
-          lineType: li.lineType || 'Labour',
-          description: li.description || '',
-          unit: '',
-          quantity: li.quantity ?? 0,
-          unitPrice: li.unitPrice ?? 0,
-          discountPercent: li.discountPercent ?? 0,
-          partId: li.partId
-        }));
+        this.applyQuote(q);
         this.loadQuoteParts();
         this.loading = false;
       },
@@ -88,6 +74,26 @@ export class QuoteEditComponent implements OnInit {
         this.loading = false;
       }
     });
+  }
+
+  private applyQuote(q: QuoteDto): void {
+    this.item = q;
+    this.amount = q.amount ?? 0;
+    this.currency = q.currency ?? 'ZAR';
+    this.description = q.description ?? '';
+    this.discountMode = (q.discountMode as 'None' | 'Global' | 'PerItem') ?? 'None';
+    this.globalDiscountPercent = q.globalDiscountPercent ?? 0;
+    this.notes = q.notes ?? '';
+    this.validUntil = q.validUntil ? q.validUntil.toString().slice(0, 10) : '';
+    this.lineItems = (q.lineItems ?? []).map(li => ({
+      lineType: li.lineType || 'Labour',
+      description: li.description || '',
+      unit: '',
+      quantity: li.quantity ?? 0,
+      unitPrice: li.unitPrice ?? 0,
+      discountPercent: li.discountPercent ?? 0,
+      partId: li.partId
+    }));
   }
 
   loadQuoteParts(): void {
@@ -250,10 +256,16 @@ export class QuoteEditComponent implements OnInit {
         : []
     };
     this.quotesService.update(this.id, body).subscribe({
-      next: () => this.router.navigate(['/quotes', this.id]),
+      next: (quote) => {
+        this.submitting = false;
+        this.applyQuote(quote);
+        this.loadQuoteParts();
+        this.toast.success('Quote updated.');
+      },
       error: (err) => {
         this.submitting = false;
         this.error = err.error?.message || 'Failed to update quote.';
+        this.toast.error(this.error!);
       }
     });
   }

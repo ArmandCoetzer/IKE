@@ -26,6 +26,27 @@
     </select>
     <span class="text-muted">{{ filtered.length }} of {{ items.length }} invoice{{ items.length === 1 ? '' : 's' }}</span>
   </div>
+  @if (auth.hasPermission('ManageInvoices')) {
+    <div class="d-flex gap-2 align-items-center flex-wrap mb-2">
+      <button type="button" class="btn btn-outline-danger btn-sm" (click)="deleteSelectedInvoices()" [disabled]="!someSelected || bulkDeleting">
+        {{ bulkDeleting ? 'Deleting...' : 'Delete selected' }}
+      </button>
+      @if (someSelected) {
+        <span class="text-muted small">{{ selectedInvoiceIds.size }} selected</span>
+      }
+    </div>
+  }
+  @if (bulkDeleteFailures.length) {
+    <div class="alert alert-warning alert-dismissible">
+      <button type="button" class="btn-close" aria-label="Close" (click)="bulkDeleteFailures = []"></button>
+      <div class="fw-semibold mb-1">Some selected invoices could not be deleted:</div>
+      <ul class="mb-0">
+        @for (failure of bulkDeleteFailures; track failure) {
+          <li>{{ failure }}</li>
+        }
+      </ul>
+    </div>
+  }
   @if (loading) {
     <p>Loading...</p>
   } @else if (filtered.length === 0) {
@@ -42,7 +63,12 @@
     <app-table>
         <thead>
           <tr>
+            @if (auth.hasPermission('ManageInvoices')) {
+              <th><input type="checkbox" [checked]="allSelected" [indeterminate]="someSelected && !allSelected" (change)="toggleSelectAll($any($event.target).checked)" aria-label="Select all filtered invoices" /></th>
+            }
             <th>Invoice #</th>
+            <th>Source</th>
+            <th>Quote</th>
             <th>Job Card</th>
             <th>Client</th>
             <th>Site</th>
@@ -53,9 +79,20 @@
           </tr>
         </thead>
         <tbody>
-          @for (i of filtered | slice:(page - 1) * pageSize : page * pageSize; track i.id) {
+          @for (i of pagedFiltered; track i.id) {
             <tr>
+              @if (auth.hasPermission('ManageInvoices')) {
+                <td><input type="checkbox" [checked]="isSelected(i.id)" (change)="toggleSelect(i.id, $any($event.target).checked)" [attr.aria-label]="'Select invoice ' + i.invoiceNumber" /></td>
+              }
               <td><span class="fw-semibold">{{ i.invoiceNumber }}</span></td>
+              <td>{{ i.isUploaded ? 'Uploaded' : 'System' }}</td>
+              <td>
+                @if (i.quoteId) {
+                  <span>{{ i.quoteNumber || 'Linked' }}</span>
+                } @else {
+                  <span class="text-muted">Not linked</span>
+                }
+              </td>
               <td>{{ i.jobCardNumber || '—' }}</td>
               <td>{{ i.clientName || '—' }}</td>
               <td>{{ i.siteName || '—' }}</td>
@@ -67,7 +104,20 @@
                   <span class="badge bg-danger ms-1">Overdue</span>
                 }
               </td>
-              <td><a class="btn btn-sm btn-outline-primary" [routerLink]="['/invoices', i.id]">View</a></td>
+              <td>
+                <div class="d-flex gap-1 justify-content-end flex-wrap">
+                  <a class="btn btn-sm btn-outline-primary" [routerLink]="['/invoices', i.id]">View</a>
+                  @if (auth.hasPermission('ManageInvoices')) {
+                    <button
+                      type="button"
+                      class="btn btn-sm btn-outline-danger"
+                      (click)="deleteInvoice(i)"
+                      [disabled]="deletingInvoiceId === i.id">
+                      {{ deletingInvoiceId === i.id ? 'Deleting...' : 'Delete' }}
+                    </button>
+                  }
+                </div>
+              </td>
             </tr>
           }
         </tbody>

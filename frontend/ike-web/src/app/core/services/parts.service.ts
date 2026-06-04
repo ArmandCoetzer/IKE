@@ -81,4 +81,40 @@ export class PartsService {
   delete(id: string): Observable<void> {
     return this.http.delete<void>(`${API}/${id}`);
   }
+
+  downloadImportTemplate(): Observable<Blob> {
+    return this.http.get(`${API}/import-template`, { responseType: 'blob' });
+  }
+
+  importPreview(file: File): Observable<PartImportResultDto> {
+    const form = new FormData();
+    form.append('file', file);
+    return this.http.post<PartImportResultDto>(`${API}/import-preview`, form);
+  }
+
+  importCommit(rows: PartImportRowDto[]): Observable<PartImportResultDto> {
+    return this.http.post<PartImportResultDto>(`${API}/import-commit`, { rows });
+  }
+}
+
+export interface PartImportRowDto {
+  rowNumber: number;
+  name: string;
+  description?: string;
+  partNumber?: string;
+  quantity: number;
+  reorderLevel: number;
+  unit?: string;
+  unitPrice: number;
+  isLabour: boolean;
+  errors: string[];
+  createdPartId?: string;
+}
+
+export interface PartImportResultDto {
+  rows: PartImportRowDto[];
+  failedRows: PartImportRowDto[];
+  totalRows: number;
+  successCount: number;
+  failedCount: number;
 }

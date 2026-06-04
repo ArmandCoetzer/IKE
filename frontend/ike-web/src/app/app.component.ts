@@ -4,10 +4,11 @@ import { Subscription } from 'rxjs';
 import { AuthService } from './core/services/auth.service';
 import { ToastContainerComponent } from './core/components/toast-container/toast-container.component';
 import { LoadingIndicatorService } from './core/services/loading-indicator.service';
+import { ConfirmDialogComponent } from './core/components/confirm-dialog/confirm-dialog.component';
 
 @Component({
   selector: 'app-root',
-  imports: [RouterOutlet, ToastContainerComponent],
+  imports: [RouterOutlet, ToastContainerComponent, ConfirmDialogComponent],
   templateUrl: './app.component.html',
   styleUrl: './app.component.scss'
 })

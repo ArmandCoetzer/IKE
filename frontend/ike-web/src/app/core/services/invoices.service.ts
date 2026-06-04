@@ -75,14 +75,29 @@ export class InvoicesService {
     if (body.quoteId) form.append('quoteId', body.quoteId);
     if (body.clientId) form.append('clientId', body.clientId);
     form.append('siteId', body.siteId);
+    if (body.amount != null) form.append('amount', String(body.amount));
     if (body.dueDate) form.append('dueDate', body.dueDate);
     if (body.notes) form.append('notes', body.notes);
+    if (body.lineItems?.length) form.append('lineItemsJson', JSON.stringify(body.lineItems));
     form.append('file', body.file);
     return this.http.post<InvoiceDto>(`${API}/upload`, form);
   }
 
+  uploadPreview(body: InvoiceUploadPreviewRequest): Observable<InvoiceUploadPreviewDto> {
+    const form = new FormData();
+    form.append('jobCardId', body.jobCardId);
+    if (body.clientId) form.append('clientId', body.clientId);
+    form.append('siteId', body.siteId);
+    form.append('file', body.file);
+    return this.http.post<InvoiceUploadPreviewDto>(`${API}/upload-preview`, form);
+  }
+
   getUploadedFile(id: string): Observable<Blob> {
     return this.http.get(`${API}/${id}/uploaded-file`, { responseType: 'blob' });
+  }
+
+  previewUploadedFile(id: string): Observable<Blob> {
+    return this.http.get(`${API}/${id}/uploaded-file/preview`, { responseType: 'blob' });
   }
 
   send(id: string, toEmail?: string, attachPdf = true): Observable<void> {
@@ -110,6 +125,10 @@ export class InvoicesService {
   confirmParts(id: string, body?: ConfirmPartsRequest): Observable<InvoiceDto> {
     return this.http.post<InvoiceDto>(`${API}/${id}/confirm-parts`, body ?? {});
   }
+
+  delete(id: string): Observable<void> {
+    return this.http.delete<void>(`${API}/${id}`);
+  }
 }
 
 export interface UpdateInvoiceRequest {
@@ -124,11 +143,13 @@ export interface ConfirmPartsRequest {
 
 export interface InvoiceLineItemInput {
   lineType: string;
+  code?: string;
   description: string;
   quantity: number;
   unitPrice: number;
   discountPercent?: number;
   partId?: string;
+  addMissingItemToSystem?: boolean;
 }
 
 export interface CreateInvoiceRequest {
@@ -148,7 +169,44 @@ export interface UploadInvoiceRequest {
   quoteId?: string;
   clientId?: string;
   siteId: string;
+  amount?: number;
   dueDate?: string;
   notes?: string;
   file: File;
+  lineItems?: InvoiceLineItemInput[];
+}
+
+export interface InvoiceUploadPreviewRequest {
+  jobCardId: string;
+  clientId?: string;
+  siteId: string;
+  file: File;
+}
+
+export interface InvoiceUploadPreviewDto {
+  uploadedFileName: string;
+  extractedInvoiceNumber?: string;
+  extractedSourceCompanyName?: string;
+  extractedClientName?: string;
+  selectedClientName: string;
+  clientNameMatchesSelected: boolean;
+  extractedText?: string;
+  extractedAmount?: number;
+  dueDate?: string;
+  lineItems: InvoiceUploadPreviewLineDto[];
+}
+
+export interface InvoiceUploadPreviewLineDto {
+  lineType: string;
+  code: string;
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  discountPercent: number;
+  vatPercent: number;
+  exclTotal: number;
+  inclTotal: number;
+  suggestedPartId?: string;
+  suggestedPartName?: string;
+  matchStatus: string;
 }

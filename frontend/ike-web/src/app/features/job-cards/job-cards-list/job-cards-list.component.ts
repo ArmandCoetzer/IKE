@@ -62,6 +62,12 @@ export class JobCardsListComponent implements OnInit, OnDestroy {
     this.page = next;
   }
 
+  invoiceStatusLabel(job: JobCardListDto): string {
+    const status = (job.status || '').trim().toLowerCase();
+    const completed = status === 'completed' || status === 'done' || status === 'closed';
+    return completed ? (job.invoiceStatus || 'Not created') : '-';
+  }
+
   ngOnInit(): void {
     const status = this.route.snapshot.queryParamMap.get('status');
     if (status) this.filterStatus = status;

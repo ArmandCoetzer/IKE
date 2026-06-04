@@ -3,12 +3,13 @@
 }
 
 .parts-actions-cell {
-  min-width: 220px;
+  min-width: 190px;
+  white-space: nowrap;
 }
 
 .parts-actions {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   justify-content: flex-end;
   align-items: center;
   gap: 0.35rem;
@@ -16,4 +17,19 @@
 
 .parts-actions .btn {
   padding-inline: 0.6rem;
+}
+
+.parts-issue-indicator {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.35rem;
+  height: 1.35rem;
+  border-radius: 999px;
+  background: #dc3545;
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: help;
 }

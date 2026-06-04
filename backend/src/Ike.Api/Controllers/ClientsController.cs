@@ -16,6 +16,11 @@ namespace Ike.Api.Controllers;
 [Authorize]
 public class ClientsController : ControllerBase
 {
+    private static readonly string[] ClientImportHeaders =
+    {
+        "Company Name", "Contact Name", "Phone", "Email", "Site Name", "Site Address"
+    };
+
     private readonly ApplicationDbContext _db;
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly IEmailService _emailService;
@@ -28,6 +33,260 @@ public class ClientsController : ControllerBase
         _emailService = emailService;
         _configuration = configuration;
     }
+
+    [HttpGet("import-template")]
+    [Authorize(Policy = "RequireEditClients")]
+    [ProducesResponseType(typeof(FileContentResult), StatusCodes.Status200OK)]
+    public ActionResult DownloadImportTemplate()
+    {
+        var xlsx = ImportFileHelper.CreateXlsxTemplate(ClientImportHeaders, "Clients");
+        return File(xlsx, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "client-import-template.xlsx");
+    }
+
+    [HttpPost("import-preview")]
+    [Authorize(Policy = "RequireEditClients")]
+    [Consumes("multipart/form-data")]
+    [ProducesResponseType(typeof(ClientImportResultDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<ClientImportResultDto>> ImportPreview([FromForm] IFormFile? file, CancellationToken ct = default)
+    {
+        var parentCompanyId = await GetCurrentCompanyIdAsync();
+        if (!parentCompanyId.HasValue)
+            return BadRequest(ApiResponseBodies.Message("Clients can only be imported by users with a company."));
+
+        if (file == null || file.Length == 0)
+            return BadRequest(ApiResponseBodies.Message("Select an XLSX file to import."));
+        var ext = Path.GetExtension(file.FileName);
+        if (!ImportFileHelper.AllowedExtensions.Contains(ext))
+            return BadRequest(ApiResponseBodies.Message("Only XLSX files are supported."));
+
+        var rows = (await ImportFileHelper.ReadRowsAsync(file, ct)).Select(ToClientImportRow).ToList();
+        await ValidateClientImportRowsAsync(rows, parentCompanyId.Value, ct);
+        return Ok(ToClientImportResult(rows, Array.Empty<ClientImportRowDto>()));
+    }
+
+    [HttpPost("import-commit")]
+    [Authorize(Policy = "RequireEditClients")]
+    [ProducesResponseType(typeof(ClientImportResultDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<ClientImportResultDto>> ImportCommit([FromBody] ClientImportCommitRequest request, CancellationToken ct = default)
+    {
+        var parentCompanyId = await GetCurrentCompanyIdAsync();
+        if (!parentCompanyId.HasValue)
+            return BadRequest(ApiResponseBodies.Message("Clients can only be imported by users with a company."));
+
+        var rows = request.Rows.Select(CloneClientImportRow).ToList();
+        await ValidateClientImportRowsAsync(rows, parentCompanyId.Value, ct);
+        var failedRows = rows.Where(r => r.Errors.Count > 0).ToList();
+        var succeededRows = new List<ClientImportRowDto>();
+
+        foreach (var group in rows.Where(r => r.Errors.Count == 0).GroupBy(r => NormalizeImportKey(r.CompanyName)))
+        {
+            var groupRows = group.ToList();
+            if (groupRows.Count == 0)
+                continue;
+
+            var first = groupRows[0];
+            var company = new Company
+            {
+                Id = Guid.NewGuid(),
+                Name = first.CompanyName.Trim(),
+                Type = CompanyType.Client,
+                ParentCompanyId = parentCompanyId,
+                ContactEmail = string.IsNullOrWhiteSpace(first.Email) ? null : first.Email.Trim(),
+                ContactPhone = string.IsNullOrWhiteSpace(first.Phone) ? null : first.Phone.Trim(),
+                Address = string.IsNullOrWhiteSpace(first.ContactName) ? null : first.ContactName.Trim(),
+                IsActive = true
+            };
+            _db.Companies.Add(company);
+
+            string? inviteToken = null;
+            ApplicationUser? newPortalUser = null;
+            var clientEmail = company.ContactEmail;
+            if (!string.IsNullOrEmpty(clientEmail))
+            {
+                inviteToken = Guid.NewGuid().ToString("N");
+                var tempPassword = "Temp1!" + Guid.NewGuid().ToString("N")[..20];
+                var user = new ApplicationUser
+                {
+                    UserName = UserIdentityNames.ScopedUserName(_userManager, company.Id, clientEmail),
+                    Email = clientEmail,
+                    EmailConfirmed = true,
+                    FullName = "",
+                    FirstName = null,
+                    LastName = null,
+                    CompanyId = company.Id,
+                    RegistrationStatus = SeedData.RegistrationStatusInvited,
+                    InviteToken = inviteToken,
+                    InviteTokenExpiry = DateTime.UtcNow.AddDays(7)
+                };
+                var createResult = await _userManager.CreateAsync(user, tempPassword);
+                if (!createResult.Succeeded)
+                {
+                    var message = string.Join(" ", createResult.Errors.Select(e => e.Description));
+                    foreach (var row in groupRows)
+                    {
+                        row.Errors.Add(message);
+                        failedRows.Add(row);
+                    }
+                    _db.Companies.Remove(company);
+                    continue;
+                }
+                await _userManager.AddToRoleAsync(user, SeedData.RoleClient);
+                newPortalUser = user;
+            }
+
+            foreach (var row in groupRows)
+            {
+                var site = new Site
+                {
+                    Id = Guid.NewGuid(),
+                    Name = row.SiteName.Trim(),
+                    Address = string.IsNullOrWhiteSpace(row.SiteAddress) ? null : row.SiteAddress.Trim(),
+                    CompanyId = company.Id,
+                    IsActive = true
+                };
+                _db.Sites.Add(site);
+                row.CreatedClientId = company.Id;
+                row.CreatedSiteId = site.Id;
+                succeededRows.Add(row);
+            }
+
+            await _db.SaveChangesAsync(ct);
+            if (!string.IsNullOrEmpty(clientEmail) && !string.IsNullOrEmpty(inviteToken))
+            {
+                var baseUrl = _configuration["App:BaseUrl"]?.TrimEnd('/') ?? "https://localhost:4201";
+                var inviteLink = $"{baseUrl}/accept-invite?token={Uri.EscapeDataString(inviteToken)}";
+                await _emailService.SendClientInviteEmailAsync(clientEmail, inviteLink, company.Name);
+            }
+        }
+
+        return Ok(ToClientImportResult(succeededRows, failedRows));
+    }
+
+    private async Task<Guid?> GetCurrentCompanyIdAsync()
+    {
+        var currentUserId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var currentUser = currentUserId != null ? await _userManager.FindByIdAsync(currentUserId) : null;
+        return currentUser?.CompanyId;
+    }
+
+    private static ClientImportRowDto ToClientImportRow(ImportTableRow row)
+    {
+        string Value(params string[] names)
+        {
+            foreach (var name in names)
+            {
+                if (row.Values.TryGetValue(ImportFileHelper.NormalizeHeader(name), out var value))
+                    return value.Trim();
+            }
+            return string.Empty;
+        }
+
+        return new ClientImportRowDto
+        {
+            RowNumber = row.RowNumber,
+            CompanyName = Value("Company Name", "Company", "Client Name"),
+            ContactName = EmptyToNull(Value("Contact Name", "Contact")),
+            Phone = EmptyToNull(Value("Phone", "Contact Phone")),
+            Email = EmptyToNull(Value("Email", "Contact Email")),
+            SiteName = Value("Site Name", "Site"),
+            SiteAddress = EmptyToNull(Value("Site Address", "Address"))
+        };
+    }
+
+    private static ClientImportRowDto CloneClientImportRow(ClientImportRowDto row) => new()
+    {
+        RowNumber = row.RowNumber,
+        CompanyName = row.CompanyName?.Trim() ?? string.Empty,
+        ContactName = EmptyToNull(row.ContactName),
+        Phone = EmptyToNull(row.Phone),
+        Email = EmptyToNull(row.Email),
+        SiteName = row.SiteName?.Trim() ?? string.Empty,
+        SiteAddress = EmptyToNull(row.SiteAddress)
+    };
+
+    private async Task ValidateClientImportRowsAsync(List<ClientImportRowDto> rows, Guid parentCompanyId, CancellationToken ct)
+    {
+        foreach (var row in rows)
+        {
+            row.Errors.Clear();
+            row.CompanyName = row.CompanyName?.Trim() ?? string.Empty;
+            row.SiteName = row.SiteName?.Trim() ?? string.Empty;
+            row.ContactName = EmptyToNull(row.ContactName);
+            row.Phone = EmptyToNull(row.Phone);
+            row.Email = EmptyToNull(row.Email);
+            row.SiteAddress = EmptyToNull(row.SiteAddress);
+
+            if (string.IsNullOrWhiteSpace(row.CompanyName))
+                row.Errors.Add("Company name is required.");
+            if (string.IsNullOrWhiteSpace(row.SiteName))
+                row.Errors.Add("Site name is required.");
+            if (!string.IsNullOrWhiteSpace(row.Email) && !IsLikelyEmail(row.Email))
+                row.Errors.Add("Email address is not valid.");
+        }
+
+        var existingClientNames = await _db.Companies.AsNoTracking()
+            .Where(c => c.Type == CompanyType.Client && c.ParentCompanyId == parentCompanyId)
+            .Select(c => c.Name)
+            .ToListAsync(ct);
+        var existingClientNameKeys = existingClientNames.Select(NormalizeImportKey).ToHashSet();
+
+        foreach (var clientGroup in rows.Where(r => !string.IsNullOrWhiteSpace(r.CompanyName)).GroupBy(r => NormalizeImportKey(r.CompanyName)))
+        {
+            var groupRows = clientGroup.ToList();
+            if (existingClientNameKeys.Contains(clientGroup.Key))
+            {
+                foreach (var row in groupRows)
+                    row.Errors.Add("Client already exists.");
+            }
+
+            var first = groupRows[0];
+            if (groupRows.Any(r => !SameOptionalValue(r.Email, first.Email)
+                                   || !SameOptionalValue(r.Phone, first.Phone)
+                                   || !SameOptionalValue(r.ContactName, first.ContactName)))
+            {
+                foreach (var row in groupRows)
+                    row.Errors.Add("Client details differ across rows for the same company.");
+            }
+
+            foreach (var siteGroup in groupRows.Where(r => !string.IsNullOrWhiteSpace(r.SiteName)).GroupBy(r => NormalizeImportKey(r.SiteName)))
+            {
+                if (siteGroup.Count() <= 1)
+                    continue;
+                foreach (var row in siteGroup)
+                    row.Errors.Add("Duplicate site for this client in the import file.");
+            }
+        }
+    }
+
+    private static ClientImportResultDto ToClientImportResult(IEnumerable<ClientImportRowDto> successRows, IEnumerable<ClientImportRowDto> failedRows)
+    {
+        var successes = successRows.ToList();
+        var failures = failedRows.ToList();
+        var rows = successes.Concat(failures).OrderBy(r => r.RowNumber).ToList();
+        return new ClientImportResultDto
+        {
+            Rows = rows,
+            FailedRows = failures.OrderBy(r => r.RowNumber).ToList(),
+            TotalRows = rows.Count,
+            SuccessCount = successes.Count,
+            FailedCount = failures.Count
+        };
+    }
+
+    private static string? EmptyToNull(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static bool IsLikelyEmail(string value) =>
+        value.Contains('@') && value.Contains('.') && !value.Any(char.IsWhiteSpace);
+
+    private static string NormalizeImportKey(string? value) =>
+        string.IsNullOrWhiteSpace(value)
+            ? string.Empty
+            : new string(value.Trim().ToUpperInvariant().Where(char.IsLetterOrDigit).ToArray());
+
+    private static bool SameOptionalValue(string? left, string? right) =>
+        string.Equals(left?.Trim() ?? string.Empty, right?.Trim() ?? string.Empty, StringComparison.OrdinalIgnoreCase);
 
     [HttpGet]
     [Authorize(Policy = "RequireViewClients")]

@@ -10,6 +10,7 @@ import { isInvoicePaid } from '../../../core/status/invoice-status';
 import { isJobDraftLike } from '../../../core/status/job-status';
 import { sanitizeInternalReturnTo } from '../../../core/services/navigation.service';
 import { PageHeaderComponent } from '../../../shared/page-header/page-header.component';
+import { ToastService } from '../../../core/services/toast.service';
 
 interface PlannedPartRow {
   partId: string;
@@ -54,7 +55,8 @@ export class JobCardEditComponent implements OnInit {
     private router: Router,
     private jobCardWorkService: JobCardWorkService,
     private jobCardsService: JobCardsService,
-    private partsService: PartsService
+    private partsService: PartsService,
+    private toast: ToastService
   ) {}
 
   ngOnInit(): void {
@@ -70,16 +72,7 @@ export class JobCardEditComponent implements OnInit {
           this.router.navigateByUrl(sanitizeInternalReturnTo(this.returnTo) || `/job-cards/${this.id}`);
           return;
         }
-        this.jobCardNumber = j.jobCardNumber ?? '';
-        this.permitsRequired = !!j.permitsRequired;
-        this.partsRequired = !!j.partsRequired;
-        this.jobDescription = j.description ?? '';
-        this.jobPriority = j.priority ?? 3;
-        this.jobDueDate = j.dueDate ? j.dueDate.toString().slice(0, 10) : '';
-        this.plannedParts = (j.plannedParts ?? []).map(this.toPlannedPartRow);
-        this.jobCompanyId = j.companyId ?? null;
-        this.jobStatus = j.status ?? null;
-        this.partsService.list(false, j.companyId ?? undefined).subscribe({ next: (p) => (this.parts = p) });
+        this.applyJobCard(j);
         this.loading = false;
       },
       error: () => {
@@ -87,6 +80,19 @@ export class JobCardEditComponent implements OnInit {
         this.loading = false;
       }
     });
+  }
+
+  private applyJobCard(j: JobCardWorkDto): void {
+    this.jobCardNumber = j.jobCardNumber ?? '';
+    this.permitsRequired = !!j.permitsRequired;
+    this.partsRequired = !!j.partsRequired;
+    this.jobDescription = j.description ?? '';
+    this.jobPriority = j.priority ?? 3;
+    this.jobDueDate = j.dueDate ? j.dueDate.toString().slice(0, 10) : '';
+    this.plannedParts = (j.plannedParts ?? []).map(this.toPlannedPartRow);
+    this.jobCompanyId = j.companyId ?? null;
+    this.jobStatus = j.status ?? null;
+    this.partsService.list(false, j.companyId ?? undefined).subscribe({ next: (p) => (this.parts = p) });
   }
 
   private toPlannedPartRow(p: PlannedPartDto): PlannedPartRow {
@@ -177,13 +183,15 @@ export class JobCardEditComponent implements OnInit {
     this.jobCardsService.update(this.id, updateBody).subscribe({
       next: () => {
         this.submitting = false;
-        const back = sanitizeInternalReturnTo(this.returnTo);
-        if (back) this.router.navigateByUrl(back);
-        else this.router.navigate(['/job-cards', this.id]);
+        this.jobCardWorkService.get(this.id!).subscribe({
+          next: (job) => this.applyJobCard(job)
+        });
+        this.toast.success('Job card updated.');
       },
       error: (err) => {
         this.error = err.error?.message || 'Failed to save.';
         this.submitting = false;
+        this.toast.error(this.error!);
       }
     });
   }

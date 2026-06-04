@@ -6,6 +6,7 @@ import { forkJoin } from 'rxjs';
 import { ClientsService, ClientDto, UpdateClientRequest } from '../../../core/services/clients.service';
 import { SitesService, SiteDto, UpdateSiteRequest } from '../../../core/services/sites.service';
 import { PageHeaderComponent } from '../../../shared/page-header/page-header.component';
+import { ToastService } from '../../../core/services/toast.service';
 
 interface ClientSiteRow {
   id: string;
@@ -46,7 +47,8 @@ export class ClientEditComponent implements OnInit {
     private route: ActivatedRoute,
     private router: Router,
     private clientsService: ClientsService,
-    private sitesService: SitesService
+    private sitesService: SitesService,
+    private toast: ToastService
   ) {}
 
   ngOnInit(): void {
@@ -111,11 +113,12 @@ export class ClientEditComponent implements OnInit {
       next: (client) => {
         this.submitting = false;
         this.applyClient(client);
-        this.router.navigate(['/clients', client.id]);
+        this.toast.success('Client updated.');
       },
       error: (err) => {
         this.submitting = false;
         this.error = err.error?.message || 'Failed to update client.';
+        this.toast.error(this.error!);
       }
     });
   }
@@ -144,10 +147,12 @@ export class ClientEditComponent implements OnInit {
         row.saving = false;
         row.latitude = s.latitude ?? undefined;
         row.longitude = s.longitude ?? undefined;
+        this.toast.success('Site updated.');
       },
       error: (err) => {
         row.saving = false;
         row.error = err.error?.message || 'Failed to save site.';
+        this.toast.error(row.error!);
       }
     });
   }
