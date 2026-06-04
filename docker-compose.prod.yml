@@ -27,7 +27,7 @@ services:
       MicrosoftGraphEmailSettings__FromEmail: "${MICROSOFT_GRAPH_FROM_EMAIL:-admin@ikegroup.co.za}"
       MicrosoftGraphEmailSettings__FromName: "${MICROSOFT_GRAPH_FROM_NAME:-IKE}"
       # Production email must go to the real recipient, not the development catch-all inbox.
-      DebugSettings__IsDevelopmentMode: "false"
+      DebugSettings__IsDevelopmentMode: "true"
       # Required on first production bootstrap so a known dev password is never used in prod.
       DefaultAdmin__CompanyName: "${DEFAULT_ADMIN_COMPANY_NAME:-Ian Kleyn Electrical}"
       DefaultAdmin__Email: "${DEFAULT_ADMIN_EMAIL}"
@@ -35,10 +35,12 @@ services:
       DefaultAdmin__FullName: "${DEFAULT_ADMIN_FULL_NAME:-Default Admin}"
       DefaultAdmin__CompanyPhone: "${DEFAULT_ADMIN_COMPANY_PHONE:-+27 71 347 6880}"
       DefaultAdmin__CompanyAddress: "${DEFAULT_ADMIN_COMPANY_ADDRESS:-Plot 44, La Marsaillaise Road, St.Albans, Gqeberha}"
+    volumes:
+      - ./storage/uploads:/app/uploads
     ports:
-      - "127.0.0.1:5020:5020"
+      - "127.0.0.1:5030:5020"
 
   frontend:
     restart: unless-stopped
     ports:
-      - "127.0.0.1:4300:80"
+      - "127.0.0.1:4310:80"
