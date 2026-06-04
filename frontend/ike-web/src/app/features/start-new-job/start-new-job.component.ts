@@ -340,6 +340,17 @@ export class StartNewJobComponent implements OnInit {
     return this.stockPartsForPlanning.find(p => p.id === this.selectedPlannedStockPartId)?.unit?.trim() || '—';
   }
 
+  guaranteedStockQuantity(part: PartDto): number {
+    return part.availableQuantity ?? part.quantity ?? 0;
+  }
+
+  stockDisplayLabel(part: PartDto): string {
+    if (part.isLabour) return part.name;
+    const reserved = part.reservedForActiveJobsQuantity ?? 0;
+    const suffix = reserved > 0 ? ` (${reserved} taken for active jobs)` : '';
+    return `${part.name} (${this.guaranteedStockQuantity(part)} in stock${suffix})`;
+  }
+
   addPlannedStockItem(): void {
     if (!this.selectedPlannedStockPartId || this.selectedPlannedStockQty < 1) return;
     if (this.plannedStockItems.some(p => p.partId === this.selectedPlannedStockPartId)) return;
@@ -349,7 +360,7 @@ export class StartNewJobComponent implements OnInit {
       partId: part.id,
       partName: part.name,
       quantity: Math.max(1, Math.round(Number(this.selectedPlannedStockQty) || 1)),
-      stockQuantity: part.quantity,
+      stockQuantity: this.guaranteedStockQuantity(part),
       unit: part.unit
     });
     this.selectedPlannedStockPartId = null;
@@ -374,8 +385,9 @@ export class StartNewJobComponent implements OnInit {
       const part = this.quoteParts.find(p => p.id === li.partId);
       if (!part || part.isLabour) continue;
       const need = Math.round(Number(li.quantity)) || 0;
-      if (need > part.quantity) {
-        result.push({ partName: part.name, need, have: part.quantity });
+      const have = this.guaranteedStockQuantity(part);
+      if (need > have) {
+        result.push({ partName: part.name, need, have });
       }
     }
     return result;

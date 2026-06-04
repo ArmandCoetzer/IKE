@@ -198,7 +198,7 @@
                               <select class="form-select form-select-sm" [(ngModel)]="li.partId" (ngModelChange)="onQuotePartSelect((quoteLineItemsPage - 1) * quoteLineItemsPageSize + $index, $event)" name="part{{(quoteLineItemsPage - 1) * quoteLineItemsPageSize + $index}}">
                                 <option [ngValue]="null">— Select {{ li.lineType === 'Labour' ? 'labour' : 'part' }} —</option>
                                 @for (p of partsForLineType(li.lineType); track p.id) {
-                                  <option [ngValue]="p.id">{{ p.name }}{{ p.isLabour ? '' : ' (' + p.quantity + ' in stock)' }}</option>
+                                  <option [ngValue]="p.id">{{ stockDisplayLabel(p) }}</option>
                                 }
                               </select>
                             </td>
@@ -348,7 +348,7 @@
                           <select class="form-select form-select-sm" [(ngModel)]="li.partId" (ngModelChange)="onQuotePartSelect((quoteLineItemsPage - 1) * quoteLineItemsPageSize + $index, $event)" name="reqpart{{(quoteLineItemsPage - 1) * quoteLineItemsPageSize + $index}}">
                             <option [ngValue]="null">— Select {{ li.lineType === 'Labour' ? 'labour' : 'part' }} —</option>
                             @for (p of partsForLineType(li.lineType); track p.id) {
-                              <option [ngValue]="p.id">{{ p.name }}{{ p.isLabour ? '' : ' (' + p.quantity + ' in stock)' }}</option>
+                              <option [ngValue]="p.id">{{ stockDisplayLabel(p) }}</option>
                             }
                           </select>
                         </td>
@@ -512,7 +512,7 @@
                   <select class="form-select form-select-sm" [(ngModel)]="selectedPlannedStockPartId" name="selectedPlannedStockPartId">
                     <option [ngValue]="null">— Select stock item —</option>
                     @for (p of availableStockPartsForPlanning; track p.id) {
-                      <option [ngValue]="p.id">{{ p.name }} ({{ p.quantity }} in stock)</option>
+                      <option [ngValue]="p.id">{{ stockDisplayLabel(p) }}</option>
                     }
                   </select>
                 </div>
@@ -534,7 +534,7 @@
               @if (plannedStockItems.length) {
                 <app-table [compact]="true">
                   <thead>
-                    <tr><th>Item</th><th>Qty</th><th>In stock</th><th>Unit</th><th></th></tr>
+                    <tr><th>Item</th><th>Qty</th><th>Guaranteed stock</th><th>Unit</th><th></th></tr>
                   </thead>
                   <tbody>
                     @for (p of plannedStockItems; track p.partId) {

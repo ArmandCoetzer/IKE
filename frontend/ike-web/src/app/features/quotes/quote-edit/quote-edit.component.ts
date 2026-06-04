@@ -108,6 +108,14 @@ export class QuoteEditComponent implements OnInit {
     return this.quoteParts.filter(p => !!p.isLabour === labour);
   }
 
+  stockDisplayLabel(part: PartDto): string {
+    if (part.isLabour) return part.name;
+    const available = part.availableQuantity ?? part.quantity ?? 0;
+    const reserved = part.reservedForActiveJobsQuantity ?? 0;
+    const suffix = reserved > 0 ? ` (${reserved} taken for active jobs)` : '';
+    return `${part.name} (${available} in stock${suffix})`;
+  }
+
   addLineItem(lineType: 'Labour' | 'Part'): void {
     this.lineItems.push({
       lineType,

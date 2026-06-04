@@ -15,6 +15,7 @@ Set values:
 - `SA_PASSWORD` (SQL Server SA password)
 - `APP_DB_USER` and `APP_DB_PASSWORD` (application DB login used by the API; avoids running the API as `sa`)
 - `SQL_VOLUME_NAME` (use different values for local/prod to prevent cross-environment password drift)
+- `UPLOADS_VOLUME_NAME` (stores uploaded quotes, permit files, job documents, and photos outside the API container)
 - `CLOUDFLARE_TUNNEL_TOKEN` (required only for the laptop/Cloudflare Tunnel deployment below)
 - `JWT_KEY_BASE64` (required by the API in production; base64 that decodes to >= 32 bytes)
 - `EMAIL_PROVIDER` (`Smtp` by default, or `MicrosoftGraph`)
@@ -85,6 +86,18 @@ docker compose --env-file .env -f docker-compose.yml -f docker-compose.dev.yml u
 
 For production, **do not destroy volume**. Instead use the original `SA_PASSWORD` for startup, then rotate credentials in a planned maintenance window.
 
+## Uploaded file persistence
+
+The API stores uploaded files under `/app/uploads` in the container. Docker Compose mounts this to the named `ike_uploads` volume so uploaded quotes and job/permit files survive API image rebuilds and container recreation.
+
+Check uploaded quotes:
+
+```bash
+docker compose --env-file .env.prod -f docker-compose.yml -f docker-compose.prod.yml exec api ls /app/uploads/quotes
+```
+
+Do not run `docker compose down -v` in production unless you intentionally want to delete the SQL and uploads volumes.
+
 ## 3) Set up host reverse proxy
 
 Only use this section if you are not using Cloudflare Tunnel. Use `deploy/nginx/ike.example.conf` as a template on your host nginx. It is configured for `ike.accent-dev.co.za` and `ikeapi.accent-dev.co.za`; update certificate paths if your certbot/live directory names differ, and reload nginx.
@@ -137,5 +150,6 @@ Azure App Registration requirements:
 - In the production override, API and frontend bind to localhost only for safer exposure (`127.0.0.1`), with nginx as the public entrypoint.
 - With `docker-compose.cloudflare.yml`, the `cloudflared` container reaches `frontend:80` and `api:5020` over the Docker network, so public host ports are not required.
 - SQL Server port is not published in production.
+- SQL data is stored in the `SQL_VOLUME_NAME` Docker volume; uploaded files are stored in the `UPLOADS_VOLUME_NAME` Docker volume.
 - Set `Jwt__Issuer`, `Jwt__Audience`, `App__BaseUrl`, and `Cors__Origins__*` in `docker-compose.prod.yml` (or via env) to match your deployed URLs. They must align with how the browser obtains and validates JWTs.
 - The Flutter release app defaults to `https://ikeapi.accent-dev.co.za/api`; override with `--dart-define=API_URL=...` only if deploying to a different API host.

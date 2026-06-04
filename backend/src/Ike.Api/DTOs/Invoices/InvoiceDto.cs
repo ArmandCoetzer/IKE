@@ -1,3 +1,5 @@
+using Microsoft.AspNetCore.Http;
+
 namespace Ike.Api.DTOs.Invoices;
 
 public class InvoiceLineItemDto
@@ -36,6 +38,17 @@ public class ConfirmPartsRequest
 {
     /// <summary>Optional. Final line items at confirmation. If omitted, current line items are confirmed as-is.</summary>
     public List<InvoiceLineItemDto>? LineItems { get; set; }
+}
+
+public class UploadInvoiceRequest
+{
+    public Guid JobCardId { get; set; }
+    public Guid? QuoteId { get; set; }
+    public Guid? ClientId { get; set; }
+    public Guid SiteId { get; set; }
+    public DateTime? DueDate { get; set; }
+    public string? Notes { get; set; }
+    public IFormFile? File { get; set; }
 }
 
 public class SetPaymentPromiseRequest
@@ -82,6 +95,12 @@ public class InvoiceDto
     public DateTime? CollectionEscalatedAt { get; set; }
     public DateTime CreatedAt { get; set; }
     public bool PartsConfirmed { get; set; }
+    public bool IsUploaded { get; set; }
+    public string? UploadedFileName { get; set; }
+    public string? UploadedContentType { get; set; }
+    public DateTime? UploadedAt { get; set; }
+    public string? ExtractedInvoiceNumber { get; set; }
+    public string? ExtractedText { get; set; }
     public string? Notes { get; set; }
     public List<InvoiceLineItemResponseDto> LineItems { get; set; } = new();
 }

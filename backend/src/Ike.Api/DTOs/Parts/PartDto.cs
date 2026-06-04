@@ -7,8 +7,10 @@ public class PartDto
     public string? Description { get; set; }
     public string? PartNumber { get; set; }
     public int Quantity { get; set; }
+    public int ReservedForActiveJobsQuantity { get; set; }
+    public int AvailableQuantity => Math.Max(0, Quantity - ReservedForActiveJobsQuantity);
     public int ReorderLevel { get; set; }
-    public bool IsLowStock => Quantity <= ReorderLevel;
+    public bool IsLowStock => AvailableQuantity <= ReorderLevel;
     public Guid? SupplierId { get; set; }
     public string? SupplierName { get; set; }
     public bool HasSupplierEmail { get; set; }

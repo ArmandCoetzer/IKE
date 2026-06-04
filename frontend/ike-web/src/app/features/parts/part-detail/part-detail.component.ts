@@ -25,8 +25,17 @@ export class PartDetailComponent implements OnInit {
 
   stockRequestQuantity(): number | undefined {
     if (!this.item) return undefined;
-    const needed = (this.item.reorderLevel ?? 0) - (this.item.quantity ?? 0);
+    const needed = (this.item.reorderLevel ?? 0) - this.guaranteedQuantity();
     return needed > 0 ? needed : undefined;
+  }
+
+  guaranteedQuantity(): number {
+    if (!this.item) return 0;
+    return this.item.availableQuantity ?? this.item.quantity ?? 0;
+  }
+
+  activeJobsTaken(): number {
+    return this.item?.reservedForActiveJobsQuantity ?? 0;
   }
 
   canRequestStock(): boolean {

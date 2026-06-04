@@ -181,12 +181,6 @@ public class JobCardsController : ControllerBase
         {
             var (companyId, _) = await _currentUser.GetClientScopeAsync(ct);
             CloseWorkAuthorisationPermitsForCompletedJob(j);
-            foreach (var jpp in j.PlannedParts)
-            {
-                var part = await _db.Parts.FindAsync([jpp.PartId], ct);
-                if (part != null)
-                    part.Quantity = Math.Max(0, part.Quantity - jpp.Quantity);
-            }
             var jobNumber = j.JobCardNumber ?? id.ToString();
             await _notificationService.NotifyUsersWithPermissionAsync(
                 "ViewJobCards",
@@ -443,12 +437,6 @@ public class JobCardsController : ControllerBase
         if (isNowCompleted && !wasCompleted)
         {
             CloseWorkAuthorisationPermitsForCompletedJob(j);
-            foreach (var jpp in j.PlannedParts)
-            {
-                var part = await _db.Parts.FindAsync([jpp.PartId], ct);
-                if (part != null)
-                    part.Quantity = Math.Max(0, part.Quantity - jpp.Quantity);
-            }
         }
         if (request.Description != null)
             j.Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim();

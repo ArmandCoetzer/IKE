@@ -105,6 +105,23 @@ export class InvoiceDetailComponent implements OnInit {
     });
   }
 
+  downloadUploadedInvoice(): void {
+    const id = this.item?.id;
+    if (!id || !this.item?.isUploaded) return;
+    this.actionError = null;
+    this.invoicesService.getUploadedFile(id).subscribe({
+      next: (blob) => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = this.item?.uploadedFileName || `Uploaded-Invoice-${this.item?.invoiceNumber ?? id}`;
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 60000);
+      },
+      error: () => (this.actionError = 'Uploaded invoice download failed.')
+    });
+  }
+
   sendToClient(): void {
     const id = this.item?.id;
     if (!id) return;
@@ -165,6 +182,7 @@ export class InvoiceDetailComponent implements OnInit {
       description: li.description,
       quantity: li.quantity,
       unitPrice: li.unitPrice,
+      discountPercent: li.discountPercent ?? 0,
       partId: li.partId
     }));
     this.invoicesService.confirmParts(id, lineItems?.length ? { lineItems } : undefined).subscribe({

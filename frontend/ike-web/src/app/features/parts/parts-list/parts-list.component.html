@@ -43,12 +43,17 @@
             <tr>
               <td><span class="fw-semibold">{{ p.name }}</span></td>
               <td>{{ p.partNumber || '—' }}</td>
-              <td>{{ p.quantity }}</td>
+              <td>
+                {{ guaranteedQuantity(p) }}
+                @if (activeJobsTaken(p) > 0) {
+                  <span class="text-muted">({{ activeJobsTaken(p) }} taken for active jobs)</span>
+                }
+              </td>
               <td>{{ p.reorderLevel }}</td>
               <td>ZAR {{ (p.unitPrice ?? 0) | number:'1.2-2' }}</td>
               <td>{{ (p.unit || '—').toLowerCase() === 'each' ? 'unit/s' : (p.unit || '—') }}</td>
               <td>
-                {{ p.supplierNames?.length ? p.supplierNames?.join(', ') : (p.supplierName || '—') }}
+                {{ p.supplierNames.length ? p.supplierNames.join(', ') : (p.supplierName || '—') }}
                 @if (p.isLowStock && !p.isLabour && p.supplierId && !p.hasSupplierEmail) {
                   <span class="badge bg-danger ms-1">Missing supplier email</span>
                 }
@@ -64,7 +69,7 @@
                           partId: p.id,
                           supplierId: p.supplierId || '',
                           requestedQuantity: stockRequestQuantity(p),
-                          notes: 'Low stock request: ' + p.name + ' (have ' + p.quantity + ', reorder ' + p.reorderLevel + ')',
+                          notes: 'Low stock request: ' + p.name + ' (have ' + guaranteedQuantity(p) + ', reorder ' + p.reorderLevel + ')',
                           returnTo: '/parts'
                         }">
                         Request stock

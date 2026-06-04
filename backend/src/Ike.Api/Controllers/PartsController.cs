@@ -57,9 +57,6 @@ public class PartsController : ControllerBase
             .Where(p => p.CompanyId != null && p.CompanyId == scopeCompanyId.Value)
             .OrderBy(p => p.Name);
 
-        if (lowStockOnly == true)
-            query = query.Where(p => p.Quantity <= p.ReorderLevel);
-
         var list = await query
             .Select(p => new PartDto
             {
@@ -82,6 +79,9 @@ public class PartsController : ControllerBase
                 UpdatedAt = p.UpdatedAt
             })
             .ToListAsync(ct);
+        ApplyActiveJobReservations(list, await GetActiveJobReservationsAsync(list.Select(p => p.Id).ToList(), ct));
+        if (lowStockOnly == true)
+            list = list.Where(p => p.IsLowStock).ToList();
         return Ok(list);
     }
 
@@ -105,7 +105,9 @@ public class PartsController : ControllerBase
             .Where(x => x.Id == id && scopeCompanyId.HasValue && x.CompanyId == scopeCompanyId.Value)
             .FirstOrDefaultAsync(ct);
         if (p == null) return NotFound();
-        return Ok(MapToDto(p));
+        var dto = MapToDto(p);
+        ApplyActiveJobReservations(new List<PartDto> { dto }, await GetActiveJobReservationsAsync(new List<Guid> { dto.Id }, ct));
+        return Ok(dto);
     }
 
     [HttpPost]
@@ -181,7 +183,9 @@ public class PartsController : ControllerBase
         }
         await _db.SaveChangesAsync();
         var loaded = await _db.Parts.AsNoTracking().Include(x => x.Supplier).Include(x => x.Suppliers).ThenInclude(ps => ps.Supplier).FirstAsync(x => x.Id == part.Id);
-        return CreatedAtAction(nameof(Get), new { id = part.Id }, MapToDto(loaded));
+        var dto = MapToDto(loaded);
+        ApplyActiveJobReservations(new List<PartDto> { dto }, await GetActiveJobReservationsAsync(new List<Guid> { dto.Id }, ct));
+        return CreatedAtAction(nameof(Get), new { id = part.Id }, dto);
     }
 
     [HttpPut("{id:guid}")]
@@ -260,7 +264,9 @@ public class PartsController : ControllerBase
         p.UpdatedAt = DateTime.UtcNow;
         // CompanyId is never modified on update - part stays in its company
         await _db.SaveChangesAsync();
-        return Ok(MapToDto(p));
+        var dto = MapToDto(p);
+        ApplyActiveJobReservations(new List<PartDto> { dto }, await GetActiveJobReservationsAsync(new List<Guid> { dto.Id }, ct));
+        return Ok(dto);
     }
 
     [HttpDelete("{id:guid}")]
@@ -307,5 +313,25 @@ public class PartsController : ControllerBase
             CreatedAt = p.CreatedAt,
             UpdatedAt = p.UpdatedAt
         };
+    }
+
+    private async Task<Dictionary<Guid, int>> GetActiveJobReservationsAsync(List<Guid> partIds, CancellationToken ct)
+    {
+        if (partIds.Count == 0)
+            return new Dictionary<Guid, int>();
+
+        return await _db.JobCardPlannedParts.AsNoTracking()
+            .Where(jpp => partIds.Contains(jpp.PartId))
+            .Where(jpp => jpp.JobCard.Status != JobCardStatus.Draft && jpp.JobCard.Status != JobCardStatus.Cancelled)
+            .Where(jpp => !_db.Invoices.Any(i => i.JobCardId == jpp.JobCardId && i.PartsConfirmed))
+            .GroupBy(jpp => jpp.PartId)
+            .Select(g => new { PartId = g.Key, Quantity = g.Sum(x => x.Quantity) })
+            .ToDictionaryAsync(x => x.PartId, x => x.Quantity, ct);
+    }
+
+    private static void ApplyActiveJobReservations(IEnumerable<PartDto> parts, IReadOnlyDictionary<Guid, int> reservationsByPartId)
+    {
+        foreach (var part in parts)
+            part.ReservedForActiveJobsQuantity = reservationsByPartId.TryGetValue(part.Id, out var reserved) ? reserved : 0;
     }
 }

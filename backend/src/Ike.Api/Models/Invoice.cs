@@ -21,6 +21,13 @@ public class Invoice
     public DateTime? CollectionEscalatedAt { get; set; }
     /// <summary>Parts on invoice must be confirmed before sending to client.</summary>
     public bool PartsConfirmed { get; set; }
+    public bool IsUploaded { get; set; }
+    public string? UploadedFilePath { get; set; }
+    public string? UploadedFileName { get; set; }
+    public string? UploadedContentType { get; set; }
+    public DateTime? UploadedAt { get; set; }
+    public string? ExtractedInvoiceNumber { get; set; }
+    public string? ExtractedText { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public string? Notes { get; set; }
 

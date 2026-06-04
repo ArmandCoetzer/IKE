@@ -117,7 +117,7 @@
                             <select class="form-select form-select-sm" [(ngModel)]="li.partId" (ngModelChange)="onPartSelect((lineItemsPage - 1) * lineItemsPageSize + $index, $event)" name="part{{(lineItemsPage - 1) * lineItemsPageSize + $index}}">
                               <option [ngValue]="null">— Select {{ li.lineType === 'Labour' ? 'labour' : 'part' }} —</option>
                               @for (p of partsForLineType(li.lineType); track p.id) {
-                                <option [ngValue]="p.id">{{ p.name }}{{ p.isLabour ? '' : ' (' + p.quantity + ' in stock)' }}</option>
+                                <option [ngValue]="p.id">{{ stockDisplayLabel(p) }}</option>
                               }
                             </select>
                           </td>

@@ -40,6 +40,7 @@ export class InvoiceAddComponent implements OnInit {
   amount: number | null = null;
   dueDate = '';
   notes = '';
+  uploadedInvoiceFile: File | null = null;
   lineItems: EditableLineItem[] = [];
   lineItemsPage = 1;
   readonly lineItemsPageSize = 10;
@@ -257,6 +258,14 @@ export class InvoiceAddComponent implements OnInit {
     return this.parts.filter(p => !!p.isLabour === labour);
   }
 
+  stockDisplayLabel(part: PartDto): string {
+    if (part.isLabour) return part.name;
+    const available = part.availableQuantity ?? part.quantity ?? 0;
+    const reserved = part.reservedForActiveJobsQuantity ?? 0;
+    const suffix = reserved > 0 ? ` (${reserved} taken for active jobs)` : '';
+    return `${part.name} (${available} in stock${suffix})`;
+  }
+
   onPartSelect(idx: number, partId: string | null): void {
     const row = this.lineItems[idx];
     if (!row) return;
@@ -273,6 +282,11 @@ export class InvoiceAddComponent implements OnInit {
     this.updateAmountFromLines();
   }
 
+  onUploadedInvoiceSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    this.uploadedInvoiceFile = input.files?.[0] ?? null;
+  }
+
   save(): void {
     this.error = null;
     if (this.invoiceBlockedByUnacceptedQuote) {
@@ -283,12 +297,34 @@ export class InvoiceAddComponent implements OnInit {
       this.error = 'Job card and site are required.';
       return;
     }
-    if (this.amount == null || this.amount < 0) {
+    if (!this.uploadedInvoiceFile && (this.amount == null || this.amount < 0)) {
       this.error = 'Amount is required.';
       return;
     }
     if (!this.dueDate) {
       this.error = 'Due date is required.';
+      return;
+    }
+    if (this.uploadedInvoiceFile) {
+      this.submitting = true;
+      this.invoicesService.upload({
+        jobCardId: this.jobCardId,
+        quoteId: this.quoteId || undefined,
+        clientId: this.clientId || undefined,
+        siteId: this.siteId,
+        dueDate: this.dueDate,
+        notes: this.notes.trim() || undefined,
+        file: this.uploadedInvoiceFile
+      }).subscribe({
+        next: (invoice) => {
+          this.submitting = false;
+          this.router.navigate(['/invoices', invoice.id]);
+        },
+        error: (err) => {
+          this.submitting = false;
+          this.error = err.error?.message || 'Failed to upload invoice.';
+        }
+      });
       return;
     }
     const lineItemsInput: InvoiceLineItemInput[] | undefined = this.lineItems.length > 0

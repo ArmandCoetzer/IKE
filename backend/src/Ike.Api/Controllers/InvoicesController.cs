@@ -1,4 +1,8 @@
+using System.Text;
+using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Ike.Api.Data;
@@ -14,6 +18,13 @@ namespace Ike.Api.Controllers;
 [Authorize]
 public class InvoicesController : ControllerBase
 {
+    private const string InvoiceUploadFolder = "uploads/invoices";
+    private const long MaxUploadedInvoiceFileSizeBytes = 10 * 1024 * 1024;
+    private static readonly HashSet<string> AllowedUploadedInvoiceExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".pdf", ".png", ".jpg", ".jpeg", ".webp", ".txt", ".csv"
+    };
+
     private readonly ApplicationDbContext _db;
     private readonly IEmailService _emailService;
     private readonly INotificationService _notificationService;
@@ -34,6 +45,94 @@ public class InvoicesController : ControllerBase
     private static decimal ComputeLineDiscountAmount(InvoiceLineItemDto li) => Math.Round(ComputeLineSubtotal(li) * (ClampPercent(li.DiscountPercent) / 100m), 2, MidpointRounding.AwayFromZero);
     private static decimal ComputeLineTotal(InvoiceLineItemDto li) => Math.Round(Math.Max(0m, ComputeLineSubtotal(li) - ComputeLineDiscountAmount(li)), 2, MidpointRounding.AwayFromZero);
     private static decimal ComputeInvoiceTotal(IEnumerable<InvoiceLineItemDto> lines) => lines.Where(li => li.Quantity > 0).Sum(ComputeLineTotal);
+    private static bool IsTextUpload(string ext) =>
+        ext.Equals(".txt", StringComparison.OrdinalIgnoreCase)
+        || ext.Equals(".csv", StringComparison.OrdinalIgnoreCase);
+
+    private static string? SanitizeFileName(string? fileName)
+    {
+        if (string.IsNullOrWhiteSpace(fileName))
+            return null;
+        var safe = Path.GetFileName(fileName.Trim());
+        foreach (var c in Path.GetInvalidFileNameChars())
+            safe = safe.Replace(c, '_');
+        return safe.Length > 256 ? safe[^256..] : safe;
+    }
+
+    private static async Task<string?> ValidateTextUploadAsync(IFormFile file, CancellationToken ct)
+    {
+        var peekLength = (int)Math.Min(2048, file.Length);
+        var buffer = new byte[peekLength];
+        await using var stream = file.OpenReadStream();
+        var read = await stream.ReadAsync(buffer.AsMemory(0, peekLength), ct);
+        if (read == 0)
+            return "File is empty.";
+        var printable = 0;
+        for (var i = 0; i < read; i++)
+        {
+            var b = buffer[i];
+            if (b is 9 or 10 or 13 || (b >= 32 && b <= 126))
+                printable++;
+        }
+        return printable >= Math.Max(1, read * 0.85) ? null : "File content does not look like readable text.";
+    }
+
+    private static async Task<string?> ExtractReadableTextAsync(string fullPath, string ext, CancellationToken ct)
+    {
+        try
+        {
+            if (IsTextUpload(ext))
+            {
+                var text = await System.IO.File.ReadAllTextAsync(fullPath, Encoding.UTF8, ct);
+                return NormalizeExtractedText(text);
+            }
+
+            if (!ext.Equals(".pdf", StringComparison.OrdinalIgnoreCase))
+                return null;
+
+            var raw = await System.IO.File.ReadAllTextAsync(fullPath, Encoding.Latin1, ct);
+            var matches = Regex.Matches(raw, @"\((?<text>(?:\\.|[^\\)]){2,})\)");
+            var parts = matches
+                .Select(m => Regex.Unescape(m.Groups["text"].Value))
+                .Where(t => t.Any(char.IsLetterOrDigit))
+                .Take(400);
+            return NormalizeExtractedText(string.Join(" ", parts));
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static string? NormalizeExtractedText(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return null;
+        var normalized = Regex.Replace(text.Replace('\0', ' '), @"\s+", " ").Trim();
+        return normalized.Length == 0 ? null : normalized[..Math.Min(normalized.Length, 4000)];
+    }
+
+    private static decimal? ExtractAmount(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return null;
+        var matches = Regex.Matches(text, @"(?ix)(?:total|amount\s*due|grand\s*total|invoice\s*total|balance\s*due)?\s*(?:R|ZAR)?\s*(?<amount>\d{1,3}(?:[,\s]\d{3})*(?:\.\d{2})|\d+(?:\.\d{2}))");
+        var values = matches
+            .Select(m => m.Groups["amount"].Value.Replace(" ", "").Replace(",", ""))
+            .Select(s => decimal.TryParse(s, System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var value) ? value : (decimal?)null)
+            .Where(v => v.HasValue)
+            .Select(v => v!.Value)
+            .ToList();
+        return values.Count == 0 ? null : values.Max();
+    }
+
+    private static string? ExtractInvoiceNumber(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return null;
+        var match = Regex.Match(text, @"(?ix)\b(?:invoice|inv)\s*(?:no\.?|number|#)?\s*[:#-]?\s*(?<number>[A-Z0-9][A-Z0-9\/\-_.]{2,})");
+        return match.Success ? match.Groups["number"].Value.Trim()[..Math.Min(match.Groups["number"].Value.Trim().Length, 128)] : null;
+    }
 
     [HttpGet]
     [Authorize(Policy = "RequireViewReports")]
@@ -89,6 +188,38 @@ public class InvoicesController : ControllerBase
                 (isClient ? inv.CompanyId != companyId : inv.Company.ParentCompanyId != companyId))
             return NotFound();
         return Ok(MapToDto(inv));
+    }
+
+    [HttpGet("{id:guid}/uploaded-file")]
+    [Authorize(Policy = "RequireViewReports")]
+    [ProducesResponseType(typeof(FileStreamResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetUploadedFile(Guid id, CancellationToken ct = default)
+    {
+        var (companyId, isClient) = await _currentUser.GetClientScopeAsync(ct);
+        var invoice = await _db.Invoices.AsNoTracking()
+            .Include(i => i.Company)
+            .FirstOrDefaultAsync(i => i.Id == id, ct);
+        if (invoice == null || !invoice.IsUploaded)
+            return NotFound();
+        if (companyId.HasValue && invoice.Company != null &&
+            (isClient ? invoice.CompanyId != companyId : invoice.Company.ParentCompanyId != companyId))
+            return NotFound();
+
+        var safePath = FilePathHelper.ValidateAndNormalize(invoice.UploadedFilePath);
+        if (safePath == null)
+            return NotFound();
+        var fullPath = Path.Combine(Directory.GetCurrentDirectory(), safePath.Replace('/', Path.DirectorySeparatorChar));
+        if (!System.IO.File.Exists(fullPath))
+            return NotFound();
+
+        var provider = new FileExtensionContentTypeProvider();
+        var contentType = invoice.UploadedContentType;
+        if (string.IsNullOrWhiteSpace(contentType) || !contentType.Contains('/'))
+            provider.TryGetContentType(fullPath, out contentType);
+
+        var stream = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+        return File(stream, contentType ?? "application/octet-stream", invoice.UploadedFileName ?? Path.GetFileName(fullPath));
     }
 
     [HttpPost]
@@ -257,6 +388,140 @@ public class InvoicesController : ControllerBase
         return CreatedAtAction(nameof(Get), new { id = inv.Id }, MapToDto(loaded));
     }
 
+    [HttpPost("upload")]
+    [Authorize(Policy = "RequireManageInvoices")]
+    [Consumes("multipart/form-data")]
+    [ProducesResponseType(typeof(InvoiceDto), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<InvoiceDto>> Upload([FromForm] UploadInvoiceRequest request, CancellationToken ct)
+    {
+        if (await IsClientScopedUserAsync(ct))
+            return Forbid();
+        if (request.File == null || request.File.Length == 0)
+            return BadRequest(ApiResponseBodies.Message("No invoice file provided."));
+        if (request.File.Length > MaxUploadedInvoiceFileSizeBytes)
+            return BadRequest(ApiResponseBodies.Message("File too large (max 10 MB)."));
+
+        var ext = Path.GetExtension(request.File.FileName).ToLowerInvariant();
+        if (string.IsNullOrWhiteSpace(ext) || !AllowedUploadedInvoiceExtensions.Contains(ext))
+            return BadRequest(ApiResponseBodies.Message("Allowed invoice file types: PDF, PNG, JPG, WEBP, TXT, CSV."));
+
+        var sigErr = IsTextUpload(ext)
+            ? await ValidateTextUploadAsync(request.File, ct)
+            : await FileContentSignatureHelper.ValidateContentMatchesExtensionAsync(request.File, ext, ct);
+        if (sigErr != null)
+            return BadRequest(ApiResponseBodies.Message(sigErr));
+
+        var (scopeCompanyId, isClientScope) = await _currentUser.GetClientScopeAsync(ct);
+        var job = await _db.JobCards.AsNoTracking()
+            .Include(j => j.Site).ThenInclude(s => s!.Company)
+            .Include(j => j.ServiceRequest)
+            .FirstOrDefaultAsync(j => j.Id == request.JobCardId, ct);
+        if (job == null)
+            return BadRequest(ApiResponseBodies.Message("Job card not found."));
+        if (job.SiteId != request.SiteId)
+            return BadRequest(ApiResponseBodies.Message("Site must match the job card's site."));
+        if (scopeCompanyId.HasValue && job.Site != null)
+        {
+            var inJobScope = isClientScope
+                ? job.Site.CompanyId == scopeCompanyId
+                : (job.Site.CompanyId == scopeCompanyId || (job.Site.Company != null && job.Site.Company.ParentCompanyId == scopeCompanyId));
+            if (!inJobScope)
+                return NotFound();
+        }
+
+        var clientId = request.ClientId ?? job.Site?.CompanyId;
+        if (!clientId.HasValue)
+            return BadRequest(ApiResponseBodies.Message("Client is required."));
+        var site = await _db.Sites.AsNoTracking().FirstOrDefaultAsync(s => s.Id == request.SiteId, ct);
+        if (site == null)
+            return BadRequest(ApiResponseBodies.Message("Site not found."));
+        if (site.CompanyId != clientId.Value)
+            return BadRequest(ApiResponseBodies.Message("Site must belong to the selected client."));
+
+        var quoteForJob = await ResolveQuoteForJobInvoiceAsync(request.JobCardId, job.ServiceRequestId, request.QuoteId, ct);
+        if (quoteForJob != null && !string.Equals(quoteForJob.Status, QuoteStatus.Accepted, StringComparison.OrdinalIgnoreCase))
+            return BadRequest(ApiResponseBodies.Message("The client must accept the quote before you can create an invoice for this job."));
+        var quoteId = request.QuoteId ?? quoteForJob?.Id;
+
+        var invoiceId = Guid.NewGuid();
+        var safeOriginalName = SanitizeFileName(request.File.FileName) ?? $"uploaded-invoice{ext}";
+        var dir = Path.Combine(Directory.GetCurrentDirectory(), InvoiceUploadFolder);
+        Directory.CreateDirectory(dir);
+        var storedFileName = $"{invoiceId:N}{ext}";
+        var fullPath = Path.Combine(dir, storedFileName);
+        await using (var stream = new FileStream(fullPath, FileMode.Create, FileAccess.Write, FileShare.None))
+        {
+            await request.File.CopyToAsync(stream, ct);
+        }
+
+        var extractedText = await ExtractReadableTextAsync(fullPath, ext, ct);
+        var extractedAmount = ExtractAmount(extractedText);
+        var extractedInvoiceNumber = ExtractInvoiceNumber(extractedText);
+        var lineItems = await BuildInitialInvoiceLineItemsAsync(request.JobCardId, quoteId, ct);
+        AddPenaltyLineIfAny(job, lineItems);
+        var computedAmount = lineItems.Count > 0 ? ComputeInvoiceTotal(lineItems) : 0m;
+        var relativePath = $"{InvoiceUploadFolder}/{storedFileName}";
+        var invoice = new Invoice
+        {
+            Id = invoiceId,
+            InvoiceNumber = NumberGenerator.NextInvoiceNumber(_db.Invoices),
+            JobCardId = request.JobCardId,
+            QuoteId = quoteId,
+            CompanyId = clientId.Value,
+            SiteId = request.SiteId,
+            Amount = extractedAmount ?? computedAmount,
+            Currency = "ZAR",
+            Status = InvoiceStatus.Draft,
+            DueDate = request.DueDate?.Date ?? DateTime.UtcNow.Date.AddDays(14),
+            Notes = BuildUploadedInvoiceNotes(request.Notes, extractedInvoiceNumber),
+            CreatedAt = DateTime.UtcNow,
+            PartsConfirmed = false,
+            IsUploaded = true,
+            UploadedFilePath = relativePath,
+            UploadedFileName = safeOriginalName,
+            UploadedContentType = request.File.ContentType,
+            UploadedAt = DateTime.UtcNow,
+            ExtractedInvoiceNumber = extractedInvoiceNumber,
+            ExtractedText = extractedText
+        };
+        _db.Invoices.Add(invoice);
+
+        var sortOrder = 0;
+        foreach (var li in lineItems)
+        {
+            if (li.Quantity <= 0) continue;
+            var partId = li.LineType?.Equals("Part", StringComparison.OrdinalIgnoreCase) == true
+                && li.PartId.HasValue
+                && await _db.Parts.AnyAsync(p => p.Id == li.PartId.Value, ct)
+                    ? li.PartId
+                    : null;
+            _db.InvoiceLineItems.Add(new InvoiceLineItem
+            {
+                Id = Guid.NewGuid(),
+                InvoiceId = invoice.Id,
+                LineType = (li.LineType ?? "Labour").Trim().Length > 0 ? li.LineType!.Trim() : "Labour",
+                Description = li.Description?.Trim() ?? "",
+                Quantity = li.Quantity,
+                UnitPrice = li.UnitPrice,
+                DiscountPercent = ClampPercent(li.DiscountPercent),
+                SortOrder = sortOrder++,
+                PartId = partId
+            });
+        }
+        await _db.SaveChangesAsync(ct);
+
+        var loaded = await _db.Invoices.AsNoTracking()
+            .Include(i => i.JobCard)
+            .Include(i => i.Quote)
+            .Include(i => i.Company)
+            .Include(i => i.Site)
+            .Include(i => i.LineItems)
+            .ThenInclude(li => li.Part)
+            .FirstAsync(i => i.Id == invoice.Id, ct);
+        return CreatedAtAction(nameof(Get), new { id = invoice.Id }, MapToDto(loaded));
+    }
+
     private static InvoiceDto MapToDto(Invoice inv)
     {
         return new InvoiceDto
@@ -284,6 +549,12 @@ public class InvoicesController : ControllerBase
             CreatedAt = inv.CreatedAt,
             Notes = inv.Notes,
             PartsConfirmed = inv.PartsConfirmed,
+            IsUploaded = inv.IsUploaded,
+            UploadedFileName = inv.UploadedFileName,
+            UploadedContentType = inv.UploadedContentType,
+            UploadedAt = inv.UploadedAt,
+            ExtractedInvoiceNumber = inv.ExtractedInvoiceNumber,
+            ExtractedText = inv.ExtractedText,
             LineItems = inv.LineItems?.OrderBy(li => li.SortOrder).Select(li => new InvoiceLineItemResponseDto
             {
                 Id = li.Id,
@@ -313,7 +584,7 @@ public class InvoicesController : ControllerBase
             return BadRequest(ApiResponseBodies.Message("Parts must be confirmed before sending the invoice."));
         var sent = await _emailService.SendInvoiceToClientAsync(id, toEmail, attachPdf, ct);
         if (!sent)
-            return BadRequest(ApiResponseBodies.Message("Invoice email was not sent. Ensure the client email is set and SMTP settings are valid."));
+            return BadRequest(ApiResponseBodies.Message("Invoice email was not sent. Ensure the client email is set, the email provider settings are valid, and any uploaded invoice file still exists."));
         inv.SentAt = DateTime.UtcNow;
         if (!InvoiceStatus.IsPaid(inv.Status))
             inv.Status = InvoiceStatus.WaitingPayment;
@@ -444,6 +715,10 @@ public class InvoicesController : ControllerBase
             }
             inv.Amount = ComputeInvoiceTotal(request.LineItems);
         }
+        var stockUsage = request?.LineItems != null
+            ? await BuildPartStockUsageAsync(request.LineItems, ct)
+            : BuildPartStockUsage(inv.LineItems);
+        await DeductConfirmedPartStockAsync(stockUsage, ct);
         inv.PartsConfirmed = true;
         await _db.SaveChangesAsync(ct);
         var result = await _db.Invoices.AsNoTracking()
@@ -532,5 +807,140 @@ public class InvoicesController : ControllerBase
         if (serviceRequestId.HasValue)
             return await _db.Quotes.AsNoTracking().FirstOrDefaultAsync(q => q.ServiceRequestId == serviceRequestId, ct);
         return null;
+    }
+
+    private async Task<List<InvoiceLineItemDto>> BuildInitialInvoiceLineItemsAsync(Guid jobCardId, Guid? quoteId, CancellationToken ct)
+    {
+        var lineItems = new List<InvoiceLineItemDto>();
+        var quotePartIds = new HashSet<Guid>();
+        if (quoteId.HasValue)
+        {
+            var quote = await _db.Quotes.AsNoTracking()
+                .Include(q => q.LineItems).ThenInclude(li => li.Part)
+                .FirstOrDefaultAsync(q => q.Id == quoteId.Value, ct);
+            if (quote != null)
+            {
+                lineItems = quote.LineItems.OrderBy(li => li.SortOrder).Select(li =>
+                {
+                    if (li.PartId.HasValue) quotePartIds.Add(li.PartId.Value);
+                    return new InvoiceLineItemDto
+                    {
+                        LineType = li.LineType,
+                        Description = li.Description,
+                        Quantity = li.Quantity,
+                        UnitPrice = li.UnitPrice,
+                        DiscountPercent = li.DiscountPercent,
+                        PartId = li.PartId
+                    };
+                }).ToList();
+            }
+        }
+
+        var plannedParts = await _db.JobCardPlannedParts.AsNoTracking()
+            .Include(jpp => jpp.Part)
+            .Where(jpp => jpp.JobCardId == jobCardId)
+            .ToListAsync(ct);
+        var linesByPartId = lineItems
+            .Where(li => li.PartId.HasValue)
+            .ToDictionary(li => li.PartId!.Value, li => li);
+        foreach (var jpp in plannedParts)
+        {
+            if (linesByPartId.TryGetValue(jpp.PartId, out var existing))
+                existing.Quantity = Math.Max(existing.Quantity, (decimal)jpp.Quantity);
+            else if (!quotePartIds.Contains(jpp.PartId))
+            {
+                lineItems.Add(new InvoiceLineItemDto
+                {
+                    LineType = "Part",
+                    Description = jpp.Part?.Name ?? "Part",
+                    Quantity = jpp.Quantity,
+                    UnitPrice = 0m,
+                    DiscountPercent = 0m,
+                    PartId = jpp.PartId
+                });
+            }
+        }
+
+        return lineItems;
+    }
+
+    private static void AddPenaltyLineIfAny(JobCard job, List<InvoiceLineItemDto> lineItems)
+    {
+        if (job.ServiceRequest?.PenaltyFee is not decimal penaltyFee || penaltyFee <= 0)
+            return;
+        lineItems.Add(new InvoiceLineItemDto
+        {
+            LineType = "Labour",
+            Description = string.IsNullOrWhiteSpace(job.ServiceRequest.PenaltyNote)
+                ? "Priority inflation penalty"
+                : job.ServiceRequest.PenaltyNote.Trim(),
+            Quantity = 1,
+            UnitPrice = penaltyFee,
+            DiscountPercent = 0m,
+            PartId = null
+        });
+    }
+
+    private static string? BuildUploadedInvoiceNotes(string? userNotes, string? extractedInvoiceNumber)
+    {
+        var notes = new List<string>();
+        if (!string.IsNullOrWhiteSpace(userNotes))
+            notes.Add(userNotes.Trim());
+        if (!string.IsNullOrWhiteSpace(extractedInvoiceNumber))
+            notes.Add($"Original invoice number: {extractedInvoiceNumber.Trim()}");
+        return notes.Count == 0 ? null : string.Join(Environment.NewLine, notes);
+    }
+
+    private async Task<Dictionary<Guid, int>> BuildPartStockUsageAsync(IEnumerable<InvoiceLineItemDto> lineItems, CancellationToken ct)
+    {
+        var requestedPartIds = lineItems
+            .Where(li => li.LineType?.Equals("Part", StringComparison.OrdinalIgnoreCase) == true && li.PartId.HasValue && li.Quantity > 0)
+            .Select(li => li.PartId!.Value)
+            .Distinct()
+            .ToList();
+        if (requestedPartIds.Count == 0)
+            return new Dictionary<Guid, int>();
+
+        var validPartIds = await _db.Parts.AsNoTracking()
+            .Where(p => requestedPartIds.Contains(p.Id))
+            .Select(p => p.Id)
+            .ToListAsync(ct);
+        var validPartIdSet = validPartIds.ToHashSet();
+
+        return lineItems
+            .Where(li => li.LineType?.Equals("Part", StringComparison.OrdinalIgnoreCase) == true
+                && li.PartId.HasValue
+                && validPartIdSet.Contains(li.PartId.Value)
+                && li.Quantity > 0)
+            .GroupBy(li => li.PartId!.Value)
+            .ToDictionary(g => g.Key, g => g.Sum(li => DecimalQuantityToStockUnits(li.Quantity)));
+    }
+
+    private static Dictionary<Guid, int> BuildPartStockUsage(IEnumerable<InvoiceLineItem> lineItems)
+    {
+        return lineItems
+            .Where(li => li.LineType.Equals("Part", StringComparison.OrdinalIgnoreCase)
+                && li.PartId.HasValue
+                && li.Quantity > 0)
+            .GroupBy(li => li.PartId!.Value)
+            .ToDictionary(g => g.Key, g => g.Sum(li => DecimalQuantityToStockUnits(li.Quantity)));
+    }
+
+    private async Task DeductConfirmedPartStockAsync(IReadOnlyDictionary<Guid, int> stockUsage, CancellationToken ct)
+    {
+        if (stockUsage.Count == 0)
+            return;
+
+        var partIds = stockUsage.Keys.ToList();
+        var parts = await _db.Parts.Where(p => partIds.Contains(p.Id)).ToListAsync(ct);
+        foreach (var part in parts)
+            part.Quantity = Math.Max(0, part.Quantity - stockUsage[part.Id]);
+    }
+
+    private static int DecimalQuantityToStockUnits(decimal quantity)
+    {
+        if (quantity <= 0)
+            return 0;
+        return (int)Math.Ceiling(quantity);
     }
 }

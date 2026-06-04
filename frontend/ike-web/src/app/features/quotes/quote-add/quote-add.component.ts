@@ -127,6 +127,14 @@ export class QuoteAddComponent implements OnInit {
     return this.quoteParts.filter(p => !!p.isLabour === labour);
   }
 
+  stockDisplayLabel(part: PartDto): string {
+    if (part.isLabour) return part.name;
+    const available = part.availableQuantity ?? part.quantity ?? 0;
+    const reserved = part.reservedForActiveJobsQuantity ?? 0;
+    const suffix = reserved > 0 ? ` (${reserved} taken for active jobs)` : '';
+    return `${part.name} (${available} in stock${suffix})`;
+  }
+
   get quoteTotalFromLines(): number {
     const valid = this.lineItems.filter(li => li.quantity > 0 && li.unitPrice >= 0);
     const subtotal = valid.reduce((s, li) => s + li.quantity * li.unitPrice, 0);

@@ -38,8 +38,14 @@ export interface InvoiceDto {
   paidAt?: string;
   createdAt: string;
   notes?: string;
-  lineItems?: InvoiceLineItemDto[];
+  lineItems: InvoiceLineItemDto[];
   partsConfirmed?: boolean;
+  isUploaded?: boolean;
+  uploadedFileName?: string;
+  uploadedContentType?: string;
+  uploadedAt?: string;
+  extractedInvoiceNumber?: string;
+  extractedText?: string;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -61,6 +67,22 @@ export class InvoicesService {
 
   create(body: CreateInvoiceRequest): Observable<InvoiceDto> {
     return this.http.post<InvoiceDto>(API, body);
+  }
+
+  upload(body: UploadInvoiceRequest): Observable<InvoiceDto> {
+    const form = new FormData();
+    form.append('jobCardId', body.jobCardId);
+    if (body.quoteId) form.append('quoteId', body.quoteId);
+    if (body.clientId) form.append('clientId', body.clientId);
+    form.append('siteId', body.siteId);
+    if (body.dueDate) form.append('dueDate', body.dueDate);
+    if (body.notes) form.append('notes', body.notes);
+    form.append('file', body.file);
+    return this.http.post<InvoiceDto>(`${API}/upload`, form);
+  }
+
+  getUploadedFile(id: string): Observable<Blob> {
+    return this.http.get(`${API}/${id}/uploaded-file`, { responseType: 'blob' });
   }
 
   send(id: string, toEmail?: string, attachPdf = true): Observable<void> {
@@ -119,4 +141,14 @@ export interface CreateInvoiceRequest {
   currency?: string;
   notes?: string;
   lineItems?: InvoiceLineItemInput[];
+}
+
+export interface UploadInvoiceRequest {
+  jobCardId: string;
+  quoteId?: string;
+  clientId?: string;
+  siteId: string;
+  dueDate?: string;
+  notes?: string;
+  file: File;
 }

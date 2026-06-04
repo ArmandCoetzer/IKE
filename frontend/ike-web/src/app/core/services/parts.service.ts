@@ -11,13 +11,15 @@ export interface PartDto {
   description?: string;
   partNumber?: string;
   quantity: number;
+  reservedForActiveJobsQuantity?: number;
+  availableQuantity?: number;
   reorderLevel: number;
   isLowStock: boolean;
   supplierId?: string;
   supplierName?: string;
   hasSupplierEmail?: boolean;
-  supplierIds?: string[];
-  supplierNames?: string[];
+  supplierIds: string[];
+  supplierNames: string[];
   unit?: string;
   unitPrice?: number;
   isLabour?: boolean;

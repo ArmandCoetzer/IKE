@@ -56,8 +56,16 @@ export class PartsListComponent implements OnInit {
   }
 
   stockRequestQuantity(p: PartDto): number | undefined {
-    const needed = (p.reorderLevel ?? 0) - (p.quantity ?? 0);
+    const needed = (p.reorderLevel ?? 0) - this.guaranteedQuantity(p);
     return needed > 0 ? needed : undefined;
+  }
+
+  guaranteedQuantity(p: PartDto): number {
+    return p.availableQuantity ?? p.quantity ?? 0;
+  }
+
+  activeJobsTaken(p: PartDto): number {
+    return p.reservedForActiveJobsQuantity ?? 0;
   }
 
   canRequestStock(p: PartDto): boolean {
